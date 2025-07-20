@@ -14,10 +14,62 @@
   "contributes": {
     "commands": [
       {
-        "command": "codereader.helloWorld",
-        "title": "Hello World"
+        "command": "codereader.addTestData",
+        "title": "Add Test Data"
+      },
+      {
+        "command": "codereader.showTestData",
+        "title": "Show Test Data"
+      },
+      {
+        "command": "codereader.createPostIt",
+        "title": "Create PostIt"
+      },
+      {
+        "command": "codereader.createPostItAtLine",
+        "title": "Create PostIt at Line"
+      },
+      {
+        "command": "codereader.clearAllPostIts",
+        "title": "Clear All PostIts"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codereader.createPostIt",
+          "group": "1_modification",
+          "when": "editorHasSelection || editorTextFocus"
+        }
+      ],
+      "editor/lineNumber/context": [
+        {
+          "command": "codereader.createPostItAtLine",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codereader-sidebar",
+          "title": "Code Reader",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codereader-sidebar": [
+        {
+          "id": "codeReaderPostIt",
+          "name": "ポストイット"
+        },
+        {
+          "id": "codeReaderChat",
+          "name": "チャット"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",
