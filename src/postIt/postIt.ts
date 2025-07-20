@@ -1,113 +1,78 @@
 import * as vscode from 'vscode';
-import { PostItStorage, PostItNote } from './postItStorage';
+import { PostItStorage } from './postItStorage';
+import { PostItTreeProvider } from './postItTreeProvider';
+import { PostItCodeLensProvider } from './postItCodeLens';
+import { PostItFoldingProvider } from './postItFoldingProvider';
 
-export class PostItProvider implements vscode.TreeDataProvider<PostItItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<PostItItem | undefined | null | void> = new vscode.EventEmitter<PostItItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<PostItItem | undefined | null | void> = this._onDidChangeTreeData.event;
+/**
+ * PostIt機能の統括クラス
+ * 各プロバイダーを管理し、統合的なインターフェースを提供
+ */
+export class PostItManager {
+    private treeProvider: PostItTreeProvider;
+    private codeLensProvider: PostItCodeLensProvider;
+    private foldingProvider: PostItFoldingProvider;
+    
+    constructor(private storage: PostItStorage) {
+        this.treeProvider = new PostItTreeProvider(storage);
+        this.codeLensProvider = new PostItCodeLensProvider(storage);
+        this.foldingProvider = new PostItFoldingProvider(storage);
+    }
 
-    constructor(private postItStorage: PostItStorage) {}
+    /**
+     * VS Code拡張にプロバイダーを登録
+     */
+    registerProviders(context: vscode.ExtensionContext): void {
+        // TreeDataProvider を登録
+        vscode.window.registerTreeDataProvider('codeReaderPostIt', this.treeProvider);
+        vscode.window.registerTreeDataProvider('codeReaderPostIta', this.treeProvider);
 
+        // ドラッグ&ドロップ機能付きTreeViewを登録
+        vscode.window.createTreeView('codeReaderPostIt', {
+            treeDataProvider: this.treeProvider,
+            dragAndDropController: this.treeProvider
+        });
+
+        // CodeLensProvider を登録
+        const codeLensDisposable = vscode.languages.registerCodeLensProvider('*', this.codeLensProvider);
+        
+        // FoldingRangeProvider を登録
+        const foldingDisposable = vscode.languages.registerFoldingRangeProvider('*', this.foldingProvider);
+
+        // Disposableをコンテキストに追加
+        context.subscriptions.push(codeLensDisposable, foldingDisposable);
+    }
+
+    /**
+     * 全てのプロバイダーを更新
+     */
     refresh(): void {
-        this._onDidChangeTreeData.fire();
+        this.treeProvider.refresh();
+        this.codeLensProvider.refresh();
+        this.foldingProvider.refresh();
     }
 
-    getTreeItem(element: PostItItem): vscode.TreeItem {
-        return element;
+    /**
+     * TreeProviderを取得
+     */
+    getTreeProvider(): PostItTreeProvider {
+        return this.treeProvider;
     }
 
-    async getChildren(element?: PostItItem): Promise<PostItItem[]> {
-        try {
-            if (!element) {
-                // ルートレベル - フォルダを表示
-                const folders = await this.postItStorage.getFolders();
-                return folders.map(folder => new PostItItem(
-                    folder,
-                    vscode.TreeItemCollapsibleState.Expanded,
-                    'folder',
-                    folder
-                ));
-            } else if (element.itemType === 'folder') {
-                // フォルダ内のPostItNotesを表示
-                const notes = await this.postItStorage.getNotesByFolder(element.folderPath!);
-                return notes.map(note => new PostItItem(
-                    note.title,
-                    vscode.TreeItemCollapsibleState.None,
-                    'note',
-                    undefined,
-                    note
-                ));
-            }
-        } catch (error) {
-            console.error('Error getting PostIt children:', error);
-            vscode.window.showErrorMessage(`Failed to load PostIt data: ${error}`);
-        }
-        
-        return [];
+    /**
+     * CodeLensProviderを取得
+     */
+    getCodeLensProvider(): PostItCodeLensProvider {
+        return this.codeLensProvider;
+    }
+
+    /**
+     * FoldingProviderを取得
+     */
+    getFoldingProvider(): PostItFoldingProvider {
+        return this.foldingProvider;
     }
 }
 
-class PostItItem extends vscode.TreeItem {
-    constructor(
-        public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly itemType: 'folder' | 'note',
-        public readonly folderPath?: string,
-        public readonly note?: PostItNote,
-        public readonly command?: vscode.Command
-    ) {
-        super(label, collapsibleState);
-        
-        if (itemType === 'folder') {
-            this.tooltip = `Folder: ${folderPath}`;
-            this.description = '';
-            this.iconPath = new vscode.ThemeIcon('folder');
-            this.contextValue = 'postItFolder';
-        } else if (itemType === 'note' && note) {
-            this.tooltip = `${note.title}\nColor: ${note.corlor}\nFile: ${note.Lines.file}\nLine: ${note.Lines.line}\nCreated: ${note.createdAt}`;
-            this.description = `${note.corlor} • Line ${note.Lines.line}`;
-            this.iconPath = new vscode.ThemeIcon('note');
-            this.contextValue = 'postItNote';
-            
-            // ノートをクリックした時にファイルを開くコマンドを設定
-            const lineData = note.Lines;
-            const vscodeLineNumber = lineData.line - 1; // 1ベースから0ベースに変換
-            
-            // ワークスペース相対パスから絶対パスに変換
-            let fileUri: vscode.Uri;
-            if (lineData.file.startsWith('/') || lineData.file.match(/^[a-zA-Z]:/)) {
-                // 既に絶対パスの場合
-                fileUri = vscode.Uri.file(lineData.file);
-            } else {
-                // 相対パスの場合、ワークスペースフォルダから解決
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-                if (workspaceFolder) {
-                    fileUri = vscode.Uri.joinPath(workspaceFolder.uri, lineData.file);
-                } else {
-                    fileUri = vscode.Uri.file(lineData.file);
-                }
-            }
-            
-            console.log(`Opening PostIt:`, {
-                storedFile: lineData.file,
-                resolvedUri: fileUri.toString(),
-                storedLine: lineData.line, // 保存されている行番号（1ベース）
-                vscodeLineNumber: vscodeLineNumber, // VSCode用行番号（0ベース）
-                text: lineData.text.substring(0, 50) + (lineData.text.length > 50 ? '...' : '')
-            });
-            
-            this.command = {
-                command: 'vscode.open',
-                title: 'Open File',
-                arguments: [
-                    fileUri,
-                    {
-                        selection: new vscode.Range(
-                            vscodeLineNumber, 0, 
-                            vscodeLineNumber, 0
-                        )
-                    }
-                ]
-            };
-        }
-    }
-}
+// 後方互換性のため、従来のPostItProviderもエクスポート
+export const PostItProvider = PostItTreeProvider;

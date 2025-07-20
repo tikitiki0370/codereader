@@ -14,41 +14,114 @@
   "contributes": {
     "commands": [
       {
-        "command": "codereader.addTestData",
-        "title": "Add Test Data"
-      },
-      {
-        "command": "codereader.showTestData",
-        "title": "Show Test Data"
-      },
-      {
         "command": "codereader.createPostIt",
-        "title": "Create PostIt"
+        "title": "PostIt: Create PostIt"
       },
       {
         "command": "codereader.createPostItAtLine",
-        "title": "Create PostIt at Line"
+        "title": "PostIt: Create PostIt at Line"
       },
       {
         "command": "codereader.clearAllPostIts",
-        "title": "Clear All PostIts"
+        "title": "PostIt: Clear All PostIts"
+      },
+      {
+        "command": "codereader.changePostItTitle",
+        "title": "Change Title"
+      },
+      {
+        "command": "codereader.deletePostIt",
+        "title": "Delete PostIt"
+      },
+      {
+        "command": "codereader.createFolder",
+        "title": "Create Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "codereader.createSubFolder",
+        "title": "Create Subfolder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "codereader.renameFolder",
+        "title": "Rename Folder"
+      },
+      {
+        "command": "codereader.codeCopy",
+        "title": "Copy Selected Lines"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "codereader.createPostIt",
+          "submenu": "codereader.menu",
           "group": "1_modification",
-          "when": "editorHasSelection || editorTextFocus"
+          "when": "editorTextFocus"
         }
       ],
       "editor/lineNumber/context": [
         {
-          "command": "codereader.createPostItAtLine",
+          "submenu": "codereader.menu",
           "group": "1_modification"
+        }
+      ],
+      "codereader.menu": [
+        {
+          "command": "codereader.createPostIt",
+          "group": "postit@1",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.createPostItAtLine",
+          "group": "postit@2"
+        },
+        {
+          "command": "codereader.clearAllPostIts",
+          "group": "postit@3"
+        },
+        {
+          "command": "codereader.codeCopy",
+          "group": "codecopy@1",
+          "when": "editorHasSelection"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codereader.changePostItTitle",
+          "when": "view == codeReaderPostIt && viewItem == postItNote",
+          "group": "postit@1"
+        },
+        {
+          "command": "codereader.deletePostIt",
+          "when": "view == codeReaderPostIt && viewItem == postItNote",
+          "group": "postit@2"
+        },
+        {
+          "command": "codereader.createSubFolder",
+          "when": "view == codeReaderPostIt && viewItem == postItFolder",
+          "group": "folder@1"
+        },
+        {
+          "command": "codereader.renameFolder",
+          "when": "view == codeReaderPostIt && viewItem == postItFolder",
+          "group": "folder@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "codereader.createFolder",
+          "when": "view == codeReaderPostIt",
+          "group": "navigation@2"
         }
       ]
     },
+    "submenus": [
+      {
+        "id": "codereader.menu",
+        "label": "CodeReader"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -62,13 +135,31 @@
       "codereader-sidebar": [
         {
           "id": "codeReaderPostIt",
-          "name": "ポストイット"
+          "name": "Post It",
+          "canSelectMany": false,
+          "dragAndDrop": true
         },
         {
           "id": "codeReaderChat",
           "name": "チャット"
         }
       ]
+    },
+    "codeLens": [
+      {
+        "language": "*",
+        "command": "codereader.postItCodeLens"
+      }
+    ],
+    "configuration": {
+      "title": "CodeReader",
+      "properties": {
+        "codereader.codeCopy.format": {
+          "type": "string",
+          "default": "`{filepath}` {startLine}行目～{endLine}行目\\n```\\n{code}\\n```",
+          "description": "Format template for copying selected lines. Use {filepath}, {startLine}, {endLine}, {code} as placeholders. Use \\n for line breaks."
+        }
+      }
     }
   },
   "scripts": {

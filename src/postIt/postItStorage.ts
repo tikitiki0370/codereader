@@ -15,6 +15,7 @@ export interface PostIt {
     };
     Config: {
         debug: boolean;
+        lastedFolder?: string; // 最後に利用(追加、作成)したフォルダ
     }
     Version: string;
 }
@@ -22,8 +23,8 @@ export interface PostIt {
 export interface PostItNote {
     id: string;
     title: string;
-    corlor: string;
-    Lines: PostItLine;
+    color: string;
+    Lines: PostItLine[];
     ViewType: PostItViewType;
     createdAt: Date;
     updatedAt: Date;
@@ -31,12 +32,13 @@ export interface PostItNote {
 export interface PostItLine {
     file: string;
     line: number;
+    endLine: number;
     text: string;
 }
 
 export enum PostItViewType {
     Line = 'line',
-    Comment = 'comment',
+    CodeLens = 'codelens',
 }
 
 // PostIt作成時の入力型（idと日付フィールドを除く）
@@ -312,7 +314,7 @@ export class PostItStorage {
         
         for (const notes of Object.values(data.PostIts)) {
             const matchingNotes = notes.filter(note =>
-                note.Lines.file === filePath
+                note.Lines.some(line => line.file === filePath)
             );
             results.push(...matchingNotes);
         }
@@ -349,6 +351,26 @@ export class PostItStorage {
         return data.Config;
     }
     
+    // 有効な最後使用フォルダを取得（存在しない場合はDefaultを返す）
+    async getValidLastedFolder(): Promise<string> {
+        const config = await this.getConfig();
+        const lastedFolder = config.lastedFolder;
+        
+        if (!lastedFolder) {
+            return PostItStorage.DEFAULT_FOLDER;
+        }
+        
+        // フォルダが存在するかチェック
+        const data = await this.getPostItData();
+        if (data.PostIts[lastedFolder]) {
+            return lastedFolder;
+        }
+        
+        // 存在しない場合はDefaultに設定を更新して返す
+        await this.updateConfig({ lastedFolder: PostItStorage.DEFAULT_FOLDER });
+        return PostItStorage.DEFAULT_FOLDER;
+    }
+    
     // PostItsを削除（Defaultフォルダのみ残す、Configは保持）
     async clearAllNotes(): Promise<void> {
         const data = await this.getPostItData();
@@ -359,5 +381,50 @@ export class PostItStorage {
         };
         
         await this.savePostItData(data);
+    }
+
+    // フォルダをリネーム
+    async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
+        const data = await this.getPostItData();
+        
+        // 新しいフォルダパスが既に存在するかチェック
+        if (data.PostIts[newPath]) {
+            return false; // 既に存在
+        }
+        
+        // デフォルトフォルダはリネーム不可
+        if (oldPath === PostItStorage.DEFAULT_FOLDER) {
+            return false;
+        }
+        
+        // 対象フォルダが存在するかチェック
+        if (!data.PostIts[oldPath]) {
+            return false;
+        }
+        
+        // フォルダをリネーム（PostItを移動）
+        data.PostIts[newPath] = data.PostIts[oldPath];
+        delete data.PostIts[oldPath];
+        
+        // サブフォルダもリネーム
+        const oldPrefix = oldPath + '/';
+        const newPrefix = newPath + '/';
+        const subfolders = Object.keys(data.PostIts).filter(f => f.startsWith(oldPrefix));
+        
+        for (const subfolder of subfolders) {
+            const newSubfolder = subfolder.replace(oldPrefix, newPrefix);
+            data.PostIts[newSubfolder] = data.PostIts[subfolder];
+            delete data.PostIts[subfolder];
+        }
+        
+        // 設定のlastedFolderも更新
+        if (data.Config.lastedFolder === oldPath) {
+            data.Config.lastedFolder = newPath;
+        } else if (data.Config.lastedFolder?.startsWith(oldPrefix)) {
+            data.Config.lastedFolder = data.Config.lastedFolder.replace(oldPrefix, newPrefix);
+        }
+        
+        await this.savePostItData(data);
+        return true;
     }
 }
