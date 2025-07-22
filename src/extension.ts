@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { PostItManager, PostItStorage, PostItViewType } from './postIt';
+import { QuickMemoStorage, QuickMemoFile } from './quickMemo/quickMemoStorage';
+import { QuickMemoTreeProvider } from './quickMemo/quickMemoTreeProvider';
 import { StateController } from './stateController';
 import { CodeCopy } from './codeCopy';
 
@@ -11,6 +13,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// データベースコントローラーを初期化
 	let stateController: StateController;
 	let postItStorage: PostItStorage;
+	let quickMemoStorage: QuickMemoStorage;
 	
 	// PostIt用のGutter Decorationを作成
 	const postItDecorationType = vscode.window.createTextEditorDecorationType({
@@ -27,6 +30,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		
 		// PostItStorageを初期化
 		postItStorage = new PostItStorage(stateController);
+		
+		// QuickMemoStorageを初期化
+		quickMemoStorage = new QuickMemoStorage(stateController, context);
+		await quickMemoStorage.initialize();
+		console.log('QuickMemoStorage initialized successfully');
 	} catch (error) {
 		console.error('Failed to initialize StateController:', error);
 		vscode.window.showErrorMessage('Failed to initialize database: ' + error);
@@ -36,6 +44,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	// PostIt統括マネージャーを作成・登録
 	const postItManager = new PostItManager(postItStorage);
 	postItManager.registerProviders(context);
+
+	// QuickMemoTreeProviderを作成・登録
+	const quickMemoTreeProvider = new QuickMemoTreeProvider(quickMemoStorage);
+	vscode.window.registerTreeDataProvider('codeReaderQuickMemo', quickMemoTreeProvider);
 
 	// PostIt gutter decoration機能
 	async function updatePostItDecorations(editor?: vscode.TextEditor) {
@@ -314,6 +326,117 @@ export async function activate(context: vscode.ExtensionContext) {
 				color: 'yellow', // デフォルト色
 				Lines: lines,
 				ViewType: PostItViewType.Line // デフォルトはLine
+			});
+
+			// 最後に使用したフォルダとして更新
+			await postItStorage.updateConfig({ lastedFolder: targetFolder });
+
+			vscode.window.showInformationMessage(`PostIt created: ${newNote.title}`);
+			
+			// サイドバーを更新
+			postItManager.getTreeProvider().refresh();
+			
+			// Gutter decorationを更新
+			updatePostItDecorations();
+			
+			// CodeLensを更新
+			updateCodeLens();
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to create PostIt: ${error}`);
+		}
+	});
+
+	// タイトル付きでPostItを作成するコマンドを実装
+	const createPostItWithTitleCommand = vscode.commands.registerCommand('codereader.createPostItWithTitle', async () => {
+		try {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage('No active editor found');
+				return;
+			}
+
+			// タイトルの入力を求める
+			const title = await vscode.window.showInputBox({
+				prompt: 'Enter PostIt title',
+				placeHolder: 'e.g., TODO: Fix this bug',
+				validateInput: (value) => {
+					if (!value || value.trim().length === 0) {
+						return 'Title cannot be empty';
+					}
+					return null;
+				}
+			});
+
+			if (!title) {
+				return; // キャンセルされた場合
+			}
+
+			const document = editor.document;
+			const selection = editor.selection;
+			
+			// ワークスペース相対パスを取得
+			const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+			const filePath = workspaceFolder 
+				? vscode.workspace.asRelativePath(document.uri)
+				: document.fileName;
+			
+			// カーソル位置または選択範囲を取得
+			let startLine: number;
+			let endLine: number;
+			let lines: Array<{file: string, line: number, endLine: number, text: string}> = [];
+			
+			if (!selection.isEmpty) {
+				// 選択範囲がある場合
+				startLine = selection.start.line;
+				endLine = selection.end.line;
+				
+				// 選択範囲の最後が行の先頭の場合、前の行までにする
+				if (selection.end.character === 0 && endLine > startLine) {
+					endLine--;
+				}
+				
+				// 末尾空白行の自動調整
+				while (endLine > startLine && document.lineAt(endLine).text.trim() === '') {
+					endLine--;
+				}
+				
+				// 選択範囲のテキストを結合
+				const selectedLines: string[] = [];
+				for (let i = startLine; i <= endLine; i++) {
+					selectedLines.push(document.lineAt(i).text);
+				}
+				const combinedText = selectedLines.join('\n');
+				
+				lines.push({
+					file: filePath,
+					line: startLine + 1, // 1ベース
+					endLine: endLine + 1, // 1ベース
+					text: combinedText
+				});
+			} else {
+				// 選択範囲がない場合はカーソル位置の行
+				const cursorPosition = selection.active;
+				startLine = endLine = cursorPosition.line;
+				const lineText = document.lineAt(startLine).text;
+				
+				lines.push({
+					file: filePath,
+					line: startLine + 1, // 1ベース
+					endLine: endLine + 1, // 1ベース
+					text: lineText
+				});
+			}
+
+			// 最後に使用したフォルダを取得（存在しない場合はDefaultを返す）
+			const targetFolder = await postItStorage.getValidLastedFolder();
+
+			// PostItを指定フォルダに作成（ユーザー指定のタイトル使用）
+			const newNote = await postItStorage.addNoteToFolder(targetFolder, {
+				title: title.trim(),
+				color: 'yellow', // デフォルト色
+				Lines: lines,
+				ViewType: PostItViewType.CodeLens // タイトル指定時はCodeLensビュー
 			});
 
 			// 最後に使用したフォルダとして更新
@@ -644,8 +767,120 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register CodeCopy commands
 	CodeCopy.registerCommands(context);
 
+	// QuickMemo コマンド
+	const quickMemoCreateCommand = vscode.commands.registerCommand('codereader.quickMemoCreate', async () => {
+		try {
+			const title = await vscode.window.showInputBox({
+				prompt: 'Enter memo title',
+				placeHolder: 'Quick memo title'
+			});
+
+			if (!title) {
+				return;
+			}
+
+			const targetFolder = await quickMemoStorage.getValidLastedFolder();
+			const newMemo = await quickMemoStorage.addMemoToFolder(targetFolder, title);
+			await quickMemoStorage.updateConfig({ lastedFolder: targetFolder });
+			
+			quickMemoTreeProvider.refresh();
+			vscode.window.showInformationMessage(`QuickMemo created: ${newMemo.title}`);
+			await quickMemoStorage.openMemo(newMemo);
+		} catch (error) {
+			console.error('Error creating QuickMemo:', error);
+			vscode.window.showErrorMessage('Failed to create QuickMemo: ' + error);
+		}
+	});
+
+	const quickMemoCreateAndLinkCommand = vscode.commands.registerCommand('codereader.quickMemoCreateAndLink', async () => {
+		try {
+			const activeEditor = vscode.window.activeTextEditor;
+			if (!activeEditor) {
+				vscode.window.showWarningMessage('No active editor');
+				return;
+			}
+
+			const title = await vscode.window.showInputBox({
+				prompt: 'Enter memo title',
+				placeHolder: 'Quick memo with file link'
+			});
+
+			if (!title) {
+				return;
+			}
+
+			const filePath = activeEditor.document.uri.fsPath;
+			const targetFolder = await quickMemoStorage.getValidLastedFolder();
+			const newMemo = await quickMemoStorage.addMemoToFolder(targetFolder, title, [filePath]);
+			await quickMemoStorage.updateConfig({ lastedFolder: targetFolder });
+			
+			quickMemoTreeProvider.refresh();
+			vscode.window.showInformationMessage(`QuickMemo created with link: ${newMemo.title}`);
+			await quickMemoStorage.openMemo(newMemo);
+		} catch (error) {
+			console.error('Error creating QuickMemo with link:', error);
+			vscode.window.showErrorMessage('Failed to create QuickMemo with link: ' + error);
+		}
+	});
+
+	const quickMemoOpenLatestCommand = vscode.commands.registerCommand('codereader.quickMemoOpenLatest', async () => {
+		try {
+			const latest = await quickMemoStorage.getLatestMemo();
+			if (!latest) {
+				vscode.window.showInformationMessage('No memos found');
+				return;
+			}
+
+			await quickMemoStorage.openMemo(latest.memo);
+		} catch (error) {
+			console.error('Error opening latest QuickMemo:', error);
+			vscode.window.showErrorMessage('Failed to open latest QuickMemo: ' + error);
+		}
+	});
+
+	const openQuickMemoCommand = vscode.commands.registerCommand('codereader.openQuickMemo', async (memo: QuickMemoFile) => {
+		try {
+			await quickMemoStorage.openMemo(memo);
+		} catch (error) {
+			console.error('Error opening QuickMemo:', error);
+			vscode.window.showErrorMessage('Failed to open QuickMemo: ' + error);
+		}
+	});
+
+	const deleteQuickMemoCommand = vscode.commands.registerCommand('codereader.deleteQuickMemo', async (treeItem: any) => {
+		try {
+			if (!treeItem || !treeItem.memo) {
+				vscode.window.showErrorMessage('Invalid memo selection');
+				return;
+			}
+
+			const memo = treeItem.memo as QuickMemoFile;
+			const result = await vscode.window.showWarningMessage(
+				`Delete memo "${memo.title}"?`,
+				{ modal: true },
+				'Delete'
+			);
+
+			if (result !== 'Delete') {
+				return;
+			}
+
+			const success = await quickMemoStorage.deleteMemo(memo);
+			if (success) {
+				quickMemoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Memo "${memo.title}" deleted`);
+			} else {
+				vscode.window.showErrorMessage('Failed to delete memo');
+			}
+		} catch (error) {
+			console.error('Error deleting QuickMemo:', error);
+			vscode.window.showErrorMessage('Failed to delete QuickMemo: ' + error);
+		}
+	});
+
 	context.subscriptions.push(
-		createPostItCommand, 
+		createPostItCommand,
+		createPostItWithTitleCommand,
 		createPostItAtLineCommand, 
 		clearAllPostItsCommand,
 		changePostItTitleCommand,
@@ -655,6 +890,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		deletePostItCommand,
 		togglePostItFoldCommand,
 		openPostItLocationCommand,
+		quickMemoCreateCommand,
+		quickMemoCreateAndLinkCommand,
+		quickMemoOpenLatestCommand,
+		openQuickMemoCommand,
+		deleteQuickMemoCommand,
 		onDidChangeActiveEditor,
 		postItDecorationType
 	);

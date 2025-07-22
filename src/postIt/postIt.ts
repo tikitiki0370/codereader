@@ -25,7 +25,6 @@ export class PostItManager {
     registerProviders(context: vscode.ExtensionContext): void {
         // TreeDataProvider を登録
         vscode.window.registerTreeDataProvider('codeReaderPostIt', this.treeProvider);
-        vscode.window.registerTreeDataProvider('codeReaderPostIta', this.treeProvider);
 
         // ドラッグ&ドロップ機能付きTreeViewを登録
         vscode.window.createTreeView('codeReaderPostIt', {

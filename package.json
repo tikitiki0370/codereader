@@ -18,6 +18,10 @@
         "title": "PostIt: Create PostIt"
       },
       {
+        "command": "codereader.createPostItWithTitle",
+        "title": "PostIt: Create PostIt and set title"
+      },
+      {
         "command": "codereader.createPostItAtLine",
         "title": "PostIt: Create PostIt at Line"
       },
@@ -50,6 +54,22 @@
       {
         "command": "codereader.codeCopy",
         "title": "Copy Selected Lines"
+      },
+      {
+        "command": "codereader.quickMemoCreate",
+        "title": "quickMemo: Create Memo"
+      },
+      {
+        "command": "codereader.quickMemoCreateAndLink",
+        "title": "quickMemo: Create and Link File"
+      },
+      {
+        "command": "codereader.quickMemoOpenLatest",
+        "title": "quickMemo: Open Latest Memo"
+      },
+      {
+        "command": "codereader.deleteQuickMemo",
+        "title": "Delete Memo"
       }
     ],
     "menus": {
@@ -73,17 +93,37 @@
           "when": "editorHasSelection || editorTextFocus"
         },
         {
+          "command": "codereader.createPostItWithTitle",
+          "group": "postit@2",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
           "command": "codereader.createPostItAtLine",
-          "group": "postit@2"
+          "group": "postit@3"
         },
         {
           "command": "codereader.clearAllPostIts",
-          "group": "postit@3"
+          "group": "postit@4"
         },
         {
           "command": "codereader.codeCopy",
           "group": "codecopy@1",
           "when": "editorHasSelection"
+        },
+        {
+          "command": "codereader.quickMemoCreate",
+          "group": "quickmemo@1",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "codereader.quickMemoCreateAndLink",
+          "group": "quickmemo@2",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "codereader.quickMemoOpenLatest",
+          "group": "quickmemo@3",
+          "when": "editorTextFocus"
         }
       ],
       "view/item/context": [
@@ -106,6 +146,11 @@
           "command": "codereader.renameFolder",
           "when": "view == codeReaderPostIt && viewItem == postItFolder",
           "group": "folder@2"
+        },
+        {
+          "command": "codereader.deleteQuickMemo",
+          "when": "view == codeReaderQuickMemo && viewItem == quickMemoNote",
+          "group": "quickmemo@1"
         }
       ],
       "view/title": [
@@ -138,6 +183,11 @@
           "name": "Post It",
           "canSelectMany": false,
           "dragAndDrop": true
+        },
+        {
+          "id": "codeReaderQuickMemo",
+          "name": "Quick Memo",
+          "canSelectMany": false
         },
         {
           "id": "codeReaderChat",
