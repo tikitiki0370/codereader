@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a VS Code extension project called "codereader" written in TypeScript. The extension is in early development (v0.0.1) and currently implements a basic "Hello World" command.
+This is a VS Code extension project called "codereader" written in TypeScript. The extension provides code reading assistance tools including PostIt notes, QuickMemo, and CodeCopy functionality.
 
 ## Development Commands
 
@@ -104,3 +104,50 @@ await postItStorage.deleteNote(id);
 1. Update the README.md in `src/postIt/README.md` with the changes
 2. Include new API methods, updated usage examples, and any behavioral changes
 3. Ensure the README accurately reflects the current implementation
+
+## Features
+
+### PostIt Module
+A note-taking system that allows attaching notes to specific code locations:
+- **Folder Management**: Virtual folder structure with nested subfolder support
+- **Note Features**: Create notes from selected text, attach to specific lines
+- **Drag & Drop**: Reorganize notes between folders via tree view
+- **CodeLens Integration**: Display PostIt indicators inline with code
+- **Context Menu**: Right-click menu integration for quick access
+
+### QuickMemo Module
+A quick note-taking system for temporary thoughts and documentation:
+- **Markdown Storage**: Notes stored as `.md` files in extension storage
+- **Folder Organization**: Categorize memos into folders (General, TODO, Ideas, etc.)
+- **File Linking**: Associate memos with workspace files
+- **Quick Access**: Open latest memo, create new memos from context menu
+- **Persistent Storage**: Memos persist across VS Code sessions
+
+#### QuickMemoStorage Operations
+```typescript
+// Get instance
+const quickMemoStorage = new QuickMemoStorage(stateController, context);
+
+// Folder management
+await quickMemoStorage.createFolder('Ideas');
+await quickMemoStorage.getFolders();
+
+// Memo operations
+await quickMemoStorage.addMemoToFolder('Ideas', 'New Feature', ['src/index.ts']);
+await quickMemoStorage.getLatestMemo();
+await quickMemoStorage.openMemo(memo);
+await quickMemoStorage.deleteMemo(memo);
+```
+
+### CodeCopy Module
+A utility for copying code snippets with context information:
+- **Format Customization**: Configure output format via settings
+- **Context Preservation**: Includes file path and line numbers
+- **Template Variables**: `{filepath}`, `{startLine}`, `{endLine}`, `{code}`
+- **Default Format**: `` `{filepath}` {startLine}行目～{endLine}行目\n```\n{code}\n``` ``
+
+## Known Issues & Fixes
+
+### View Registration
+- Fixed issue where TreeDataProvider was registered with incorrect ID (`codeReaderPostIta` → `codeReaderPostIt`)
+- View IDs must match exactly between `package.json` and registration code
