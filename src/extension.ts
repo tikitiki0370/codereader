@@ -4,6 +4,7 @@ import { QuickMemoStorage, QuickMemoFile } from './quickMemo/quickMemoStorage';
 import { QuickMemoTreeProvider } from './quickMemo/quickMemoTreeProvider';
 import { StateController } from './stateController';
 import { CodeCopy } from './codeCopy';
+import { CodeMarkerStorage, DiagnosticsManager, DiagnosticsTypes, CodeMarkerTreeProvider } from './codeMarker';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension activate called');
@@ -14,6 +15,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	let stateController: StateController;
 	let postItStorage: PostItStorage;
 	let quickMemoStorage: QuickMemoStorage;
+	let codeMarkerStorage: CodeMarkerStorage;
+	let diagnosticsManager: DiagnosticsManager;
+	let codeMarkerTreeProvider: CodeMarkerTreeProvider;
 	
 	// PostIt用のGutter Decorationを作成
 	const postItDecorationType = vscode.window.createTextEditorDecorationType({
@@ -35,6 +39,16 @@ export async function activate(context: vscode.ExtensionContext) {
 		quickMemoStorage = new QuickMemoStorage(stateController, context);
 		await quickMemoStorage.initialize();
 		console.log('QuickMemoStorage initialized successfully');
+		
+		// CodeMarkerStorageを初期化
+		codeMarkerStorage = new CodeMarkerStorage(stateController);
+		
+		// DiagnosticsManagerを初期化
+		diagnosticsManager = new DiagnosticsManager(codeMarkerStorage, context);
+		
+		// CodeMarkerTreeProviderを初期化
+		codeMarkerTreeProvider = new CodeMarkerTreeProvider(codeMarkerStorage);
+		console.log('CodeMarker initialized successfully');
 	} catch (error) {
 		console.error('Failed to initialize StateController:', error);
 		vscode.window.showErrorMessage('Failed to initialize database: ' + error);
@@ -48,6 +62,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	// QuickMemoTreeProviderを作成・登録
 	const quickMemoTreeProvider = new QuickMemoTreeProvider(quickMemoStorage);
 	vscode.window.registerTreeDataProvider('codeReaderQuickMemo', quickMemoTreeProvider);
+
+	// CodeMarkerTreeProviderを登録
+	vscode.window.registerTreeDataProvider('codeReaderCodeMarker', codeMarkerTreeProvider);
 
 	// PostIt gutter decoration機能
 	async function updatePostItDecorations(editor?: vscode.TextEditor) {
@@ -775,6 +792,353 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register CodeCopy commands
 	CodeCopy.registerCommands(context);
 
+	// CodeMarker Diagnostics コマンド実装
+	const createDiagnosticsCommand = (type: DiagnosticsTypes) => {
+		return async () => {
+			try {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage('No active editor found');
+					return;
+				}
+
+				const document = editor.document;
+				const selection = editor.selection;
+				
+				// メッセージの入力を求める
+				const message = await vscode.window.showInputBox({
+					prompt: `Enter ${type} message`,
+					placeHolder: `e.g., This code needs attention`,
+					validateInput: (value) => {
+						if (!value || value.trim().length === 0) {
+							return 'Message cannot be empty';
+						}
+						return null;
+					}
+				});
+
+				if (!message) {
+					return; // キャンセルされた場合
+				}
+
+				// ファイルパスを取得
+				const filePath = document.uri.fsPath;
+				
+				let startLine: number;
+				let endLine: number;
+				let startColumn: number;
+				let endColumn: number;
+				let selectedText: string;
+				
+				if (!selection.isEmpty) {
+					// 選択範囲がある場合
+					startLine = selection.start.line + 1; // 1ベース
+					endLine = selection.end.line + 1;
+					startColumn = selection.start.character;
+					endColumn = selection.end.character;
+					selectedText = document.getText(selection);
+					
+					// 選択範囲の最後が行の先頭の場合、前の行までにする
+					if (selection.end.character === 0 && endLine > startLine) {
+						endLine--;
+						endColumn = document.lineAt(endLine - 1).text.length; // 0ベースで取得して1ベースに調整
+					}
+				} else {
+					// 選択範囲がない場合はカーソル位置の行
+					const cursorPosition = selection.active;
+					startLine = endLine = cursorPosition.line + 1; // 1ベース
+					startColumn = 0;
+					endColumn = document.lineAt(cursorPosition.line).text.length;
+					selectedText = document.lineAt(cursorPosition.line).text;
+				}
+
+				// 最後に使用したフォルダを取得
+				const targetFolder = await codeMarkerStorage.getValidLastedFolder();
+
+				// Diagnosticsを追加
+				await diagnosticsManager.addDiagnosticsToFolder(
+					targetFolder,
+					filePath,
+					type,
+					message.trim(),
+					startLine,
+					endLine,
+					startColumn,
+					endColumn,
+					selectedText
+				);
+
+				// 最後に使用したフォルダとして更新
+				await codeMarkerStorage.updateConfig({ lastedFolder: targetFolder });
+
+				// ツリーを更新
+				codeMarkerTreeProvider.refresh();
+
+				vscode.window.showInformationMessage(`${type} added: ${message.trim()}`);
+
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to add ${type}: ${error}`);
+			}
+		};
+	};
+
+	// 各種Diagnosticsコマンドを作成
+	const addDiagnosticsHintCommand = vscode.commands.registerCommand(
+		'codereader.addDiagnosticsHint',
+		createDiagnosticsCommand(DiagnosticsTypes.Hint)
+	);
+
+	const addDiagnosticsInfoCommand = vscode.commands.registerCommand(
+		'codereader.addDiagnosticsInfo',
+		createDiagnosticsCommand(DiagnosticsTypes.Info)
+	);
+
+	const addDiagnosticsWarningCommand = vscode.commands.registerCommand(
+		'codereader.addDiagnosticsWarning',
+		createDiagnosticsCommand(DiagnosticsTypes.Warning)
+	);
+
+	const addDiagnosticsErrorCommand = vscode.commands.registerCommand(
+		'codereader.addDiagnosticsError',
+		createDiagnosticsCommand(DiagnosticsTypes.Error)
+	);
+
+	// 全てのDiagnosticsをクリアするコマンド
+	const clearAllDiagnosticsCommand = vscode.commands.registerCommand('codereader.clearAllDiagnostics', async () => {
+		try {
+			// 確認ダイアログを表示
+			const answer = await vscode.window.showWarningMessage(
+				'すべてのCodeMarker Diagnosticsを削除しますか？この操作は元に戻せません。',
+				{ modal: true },
+				'削除',
+				'キャンセル'
+			);
+
+			if (answer !== '削除') {
+				return;
+			}
+
+			await diagnosticsManager.clearAllDiagnostics();
+			codeMarkerTreeProvider.refresh();
+			vscode.window.showInformationMessage('すべてのCodeMarker Diagnosticsを削除しました');
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to clear Diagnostics: ${error}`);
+		}
+	});
+
+	// CodeMarker フォルダ作成コマンド
+	const createCodeMarkerFolderCommand = vscode.commands.registerCommand('codereader.createCodeMarkerFolder', async () => {
+		try {
+			const folderPath = await vscode.window.showInputBox({
+				prompt: 'Enter folder path (use / for subfolders)',
+				placeHolder: 'e.g., Issues, TODOs, Bugs/Critical',
+				validateInput: (value) => {
+					if (!value || value.trim().length === 0) {
+						return 'Folder path cannot be empty';
+					}
+					if (value.includes('//') || value.startsWith('/') || value.endsWith('/')) {
+						return 'Invalid folder path format';
+					}
+					return null;
+				}
+			});
+
+			if (folderPath) {
+				const trimmedPath = folderPath.trim();
+				const success = await codeMarkerStorage.createFolder(trimmedPath);
+				
+				if (success) {
+					await codeMarkerStorage.updateConfig({ lastedFolder: trimmedPath });
+					vscode.window.showInformationMessage(`Created folder: ${trimmedPath}`);
+					codeMarkerTreeProvider.refresh();
+				} else {
+					vscode.window.showWarningMessage(`Folder "${trimmedPath}" already exists`);
+				}
+			}
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to create folder: ${error}`);
+		}
+	});
+
+	// CodeMarker サブフォルダ作成コマンド
+	const createCodeMarkerSubFolderCommand = vscode.commands.registerCommand('codereader.createCodeMarkerSubFolder', async (item: any) => {
+		try {
+			if (!item || !item.folderPath) {
+				vscode.window.showErrorMessage('Invalid folder item');
+				return;
+			}
+
+			const parentPath = item.folderPath;
+			const subFolderName = await vscode.window.showInputBox({
+				prompt: `Create subfolder in "${parentPath}"`,
+				placeHolder: 'e.g., Completed, Archive, Sprint1',
+				validateInput: (value) => {
+					if (!value || value.trim().length === 0) {
+						return 'Subfolder name cannot be empty';
+					}
+					if (value.includes('/')) {
+						return 'Subfolder name cannot contain "/"';
+					}
+					return null;
+				}
+			});
+
+			if (subFolderName) {
+				const trimmedName = subFolderName.trim();
+				const fullPath = `${parentPath}/${trimmedName}`;
+				const success = await codeMarkerStorage.createFolder(fullPath);
+				
+				if (success) {
+					await codeMarkerStorage.updateConfig({ lastedFolder: fullPath });
+					vscode.window.showInformationMessage(`Created subfolder: ${fullPath}`);
+					codeMarkerTreeProvider.refresh();
+				} else {
+					vscode.window.showWarningMessage(`Subfolder "${fullPath}" already exists`);
+				}
+			}
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to create subfolder: ${error}`);
+		}
+	});
+
+	// CodeMarker フォルダリネームコマンド
+	const renameCodeMarkerFolderCommand = vscode.commands.registerCommand('codereader.renameCodeMarkerFolder', async (item: any) => {
+		try {
+			if (!item || !item.folderPath) {
+				vscode.window.showErrorMessage('Invalid folder item');
+				return;
+			}
+
+			const oldPath = item.folderPath;
+			
+			// デフォルトフォルダはリネーム不可
+			if (oldPath === 'Default') {
+				vscode.window.showWarningMessage('Cannot rename the Default folder');
+				return;
+			}
+
+			const currentName = oldPath.split('/').pop() || oldPath;
+			const newName = await vscode.window.showInputBox({
+				prompt: `Rename folder "${oldPath}"`,
+				value: currentName,
+				validateInput: (value) => {
+					if (!value || value.trim().length === 0) {
+						return 'Folder name cannot be empty';
+					}
+					if (value.includes('/')) {
+						return 'Folder name cannot contain "/"';
+					}
+					return null;
+				}
+			});
+
+			if (newName && newName.trim() !== currentName) {
+				const trimmedName = newName.trim();
+				const pathParts = oldPath.split('/');
+				pathParts[pathParts.length - 1] = trimmedName;
+				const newPath = pathParts.join('/');
+				
+				const success = await codeMarkerStorage.renameFolder(oldPath, newPath);
+				
+				if (success) {
+					vscode.window.showInformationMessage(`Renamed folder: ${oldPath} → ${newPath}`);
+					codeMarkerTreeProvider.refresh();
+				} else {
+					vscode.window.showWarningMessage(`Failed to rename folder: "${newPath}" already exists or operation not allowed`);
+				}
+			}
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to rename folder: ${error}`);
+		}
+	});
+
+	// CodeMarker フォルダ削除コマンド
+	const deleteCodeMarkerFolderCommand = vscode.commands.registerCommand('codereader.deleteCodeMarkerFolder', async (item: any) => {
+		try {
+			if (!item || !item.folderPath) {
+				vscode.window.showErrorMessage('Invalid folder item');
+				return;
+			}
+
+			const folderPath = item.folderPath;
+			
+			// デフォルトフォルダは削除不可
+			if (folderPath === 'Default') {
+				vscode.window.showWarningMessage('Cannot delete the Default folder');
+				return;
+			}
+
+			// 確認ダイアログを表示
+			const answer = await vscode.window.showWarningMessage(
+				`Delete folder "${folderPath}" and all its diagnostics?`,
+				{ modal: true },
+				'Delete',
+				'Cancel'
+			);
+
+			if (answer === 'Delete') {
+				const success = await codeMarkerStorage.deleteFolder(folderPath);
+				
+				if (success) {
+					vscode.window.showInformationMessage(`Deleted folder: ${folderPath}`);
+					codeMarkerTreeProvider.refresh();
+				} else {
+					vscode.window.showWarningMessage(`Failed to delete folder: ${folderPath}`);
+				}
+			}
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to delete folder: ${error}`);
+		}
+	});
+
+	// CodeMarker Diagnostics削除コマンド
+	const deleteCodeMarkerDiagnosticsCommand = vscode.commands.registerCommand('codereader.deleteCodeMarkerDiagnostics', async (item: any) => {
+		try {
+			if (!item || !item.diagnostics || !item.folder || !item.filePath) {
+				vscode.window.showErrorMessage('Invalid diagnostics item');
+				return;
+			}
+
+			const answer = await vscode.window.showWarningMessage(
+				`Delete diagnostics "${item.diagnostics.text}"?`,
+				{ modal: true },
+				'Delete',
+				'Cancel'
+			);
+
+			if (answer === 'Delete') {
+				await diagnosticsManager.deleteDiagnostics(item.folder, item.filePath, item.diagnostics.id);
+				vscode.window.showInformationMessage(`Diagnostics "${item.diagnostics.text}" deleted`);
+				codeMarkerTreeProvider.refresh();
+			}
+
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to delete diagnostics: ${error}`);
+		}
+	});
+
+	// Diagnostics位置を開くコマンド
+	const openDiagnosticsLocationCommand = vscode.commands.registerCommand('codereader.openDiagnosticsLocation', async (diagnostics: any, filePath: string) => {
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+			const editor = await vscode.window.showTextDocument(document);
+			
+			const startPosition = new vscode.Position(diagnostics.Lines.startLine - 1, diagnostics.Lines.startColumn);
+			const endPosition = new vscode.Position(diagnostics.Lines.endLine - 1, diagnostics.Lines.endColumn);
+			
+			editor.selection = new vscode.Selection(startPosition, endPosition);
+			editor.revealRange(new vscode.Range(startPosition, endPosition), vscode.TextEditorRevealType.InCenter);
+			
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open diagnostics location: ${error}`);
+		}
+	});
+
 	// QuickMemo コマンド
 	const quickMemoCreateCommand = vscode.commands.registerCommand('codereader.quickMemoCreate', async () => {
 		try {
@@ -903,6 +1267,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		quickMemoOpenLatestCommand,
 		openQuickMemoCommand,
 		deleteQuickMemoCommand,
+		addDiagnosticsHintCommand,
+		addDiagnosticsInfoCommand,
+		addDiagnosticsWarningCommand,
+		addDiagnosticsErrorCommand,
+		clearAllDiagnosticsCommand,
+		createCodeMarkerFolderCommand,
+		createCodeMarkerSubFolderCommand,
+		renameCodeMarkerFolderCommand,
+		deleteCodeMarkerFolderCommand,
+		deleteCodeMarkerDiagnosticsCommand,
+		openDiagnosticsLocationCommand,
 		onDidChangeActiveEditor,
 		postItDecorationType
 	);

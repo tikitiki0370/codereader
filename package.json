@@ -70,6 +70,52 @@
       {
         "command": "codereader.deleteQuickMemo",
         "title": "Delete Memo"
+      },
+      {
+        "command": "codereader.addDiagnosticsHint",
+        "title": "CodeMarker: Add Hint"
+      },
+      {
+        "command": "codereader.addDiagnosticsInfo",
+        "title": "CodeMarker: Add Info"
+      },
+      {
+        "command": "codereader.addDiagnosticsWarning",
+        "title": "CodeMarker: Add Warning"
+      },
+      {
+        "command": "codereader.addDiagnosticsError",
+        "title": "CodeMarker: Add Error"
+      },
+      {
+        "command": "codereader.clearAllDiagnostics",
+        "title": "CodeMarker: Clear All Diagnostics"
+      },
+      {
+        "command": "codereader.createCodeMarkerFolder",
+        "title": "Create Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "codereader.createCodeMarkerSubFolder",
+        "title": "Create Subfolder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "codereader.renameCodeMarkerFolder",
+        "title": "Rename Folder"
+      },
+      {
+        "command": "codereader.deleteCodeMarkerFolder",
+        "title": "Delete Folder"
+      },
+      {
+        "command": "codereader.deleteCodeMarkerDiagnostics",
+        "title": "Delete Diagnostics"
+      },
+      {
+        "command": "codereader.openDiagnosticsLocation",
+        "title": "Open Location"
       }
     ],
     "menus": {
@@ -124,6 +170,30 @@
           "command": "codereader.quickMemoOpenLatest",
           "group": "quickmemo@3",
           "when": "editorTextFocus"
+        },
+        {
+          "command": "codereader.addDiagnosticsHint",
+          "group": "codemarker@1",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.addDiagnosticsInfo",
+          "group": "codemarker@2",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.addDiagnosticsWarning",
+          "group": "codemarker@3",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.addDiagnosticsError",
+          "group": "codemarker@4",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.clearAllDiagnostics",
+          "group": "codemarker@5"
         }
       ],
       "view/item/context": [
@@ -151,12 +221,37 @@
           "command": "codereader.deleteQuickMemo",
           "when": "view == codeReaderQuickMemo && viewItem == quickMemoNote",
           "group": "quickmemo@1"
+        },
+        {
+          "command": "codereader.createCodeMarkerSubFolder",
+          "when": "view == codeReaderCodeMarker && viewItem == codeMarkerFolder",
+          "group": "folder@1"
+        },
+        {
+          "command": "codereader.renameCodeMarkerFolder",
+          "when": "view == codeReaderCodeMarker && viewItem == codeMarkerFolder",
+          "group": "folder@2"
+        },
+        {
+          "command": "codereader.deleteCodeMarkerFolder",
+          "when": "view == codeReaderCodeMarker && viewItem == codeMarkerFolder",
+          "group": "folder@3"
+        },
+        {
+          "command": "codereader.deleteCodeMarkerDiagnostics",
+          "when": "view == codeReaderCodeMarker && viewItem == codeMarkerDiagnostics",
+          "group": "diagnostics@1"
         }
       ],
       "view/title": [
         {
           "command": "codereader.createFolder",
           "when": "view == codeReaderPostIt",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codereader.createCodeMarkerFolder",
+          "when": "view == codeReaderCodeMarker",
           "group": "navigation@2"
         }
       ]
@@ -190,8 +285,10 @@
           "canSelectMany": false
         },
         {
-          "id": "codeReaderChat",
-          "name": "チャット"
+          "id": "codeReaderCodeMarker",
+          "name": "Code Marker",
+          "canSelectMany": false,
+          "dragAndDrop": true
         }
       ]
     },
