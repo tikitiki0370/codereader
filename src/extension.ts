@@ -115,11 +115,19 @@ export async function activate(context: vscode.ExtensionContext) {
 		try {
 			console.log(`Folding PostIt ${postItId}: lines ${startLine + 1}-${endLine + 1}`);
 			
-			// カーソルを開始行に配置
-			const startPosition = new vscode.Position(startLine, 0);
-			editor.selection = new vscode.Selection(startPosition, startPosition);
+			// 方法1: 選択範囲を作成してからカスタム折りたたみ範囲を作成
+			const startPos = new vscode.Position(startLine, 0);
+			const endPos = new vscode.Position(endLine, editor.document.lineAt(endLine).text.length);
+			editor.selection = new vscode.Selection(startPos, endPos);
 			
-			// 折りたたみ実行
+			// カスタム折りたたみ範囲を作成（任意の範囲を折りたたみ可能にする）
+			await vscode.commands.executeCommand('editor.createFoldingRangeFromSelection');
+			
+			// 少し待機してから折りたたみ実行
+			await new Promise(resolve => setTimeout(resolve, 50));
+			
+			// カーソルを開始行に戻してから折りたたみ
+			editor.selection = new vscode.Selection(startPos, startPos);
 			await vscode.commands.executeCommand('editor.fold');
 			
 			return true;

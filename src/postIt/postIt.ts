@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { PostItStorage } from './postItStorage';
 import { PostItTreeProvider } from './postItTreeProvider';
-import { PostItCodeLensProvider } from './postItCodeLens';
+import { PostItCodeLensProvider } from './postItCodeLensProvider';
 import { PostItFoldingProvider } from './postItFoldingProvider';
 
 /**

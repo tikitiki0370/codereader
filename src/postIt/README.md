@@ -12,7 +12,7 @@ VSCode拡張のPostIt機能を提供するモジュールです。コードの�
 #### 各機能プロバイダー
 - **`postItTreeProvider.ts`** - TreeView機能（サイドバー表示・ドラッグ&ドロップ）
 - **`postItTreeItem.ts`** - TreeItemの実装
-- **`postItCodeLens.ts`** - CodeLens機能（エディタ内表示）
+- **`postItCodeLensProvider.ts`** - CodeLens機能（エディタ内表示）
 - **`postItFoldingProvider.ts`** - 折りたたみ機能
 - **`postItStorage.ts`** - データ管理・永続化
 
