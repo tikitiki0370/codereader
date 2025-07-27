@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { PostItStorage } from './postItStorage';
-import { PostItTreeProvider } from './postItTreeProvider';
+import { PostItTreeView } from './postItTreeView';
 import { PostItCodeLensProvider } from './postItCodeLensProvider';
 import { PostItFoldingProvider } from './postItFoldingProvider';
 
@@ -9,12 +9,12 @@ import { PostItFoldingProvider } from './postItFoldingProvider';
  * 各プロバイダーを管理し、統合的なインターフェースを提供
  */
 export class PostItManager {
-    private treeProvider: PostItTreeProvider;
+    private treeProvider: PostItTreeView;
     private codeLensProvider: PostItCodeLensProvider;
     private foldingProvider: PostItFoldingProvider;
     
     constructor(private storage: PostItStorage) {
-        this.treeProvider = new PostItTreeProvider(storage);
+        this.treeProvider = new PostItTreeView(storage);
         this.codeLensProvider = new PostItCodeLensProvider(storage);
         this.foldingProvider = new PostItFoldingProvider(storage);
     }
@@ -23,9 +23,6 @@ export class PostItManager {
      * VS Code拡張にプロバイダーを登録
      */
     registerProviders(context: vscode.ExtensionContext): void {
-        // TreeDataProvider を登録
-        vscode.window.registerTreeDataProvider('codeReaderPostIt', this.treeProvider);
-
         // ドラッグ&ドロップ機能付きTreeViewを登録
         vscode.window.createTreeView('codeReaderPostIt', {
             treeDataProvider: this.treeProvider,
@@ -54,7 +51,7 @@ export class PostItManager {
     /**
      * TreeProviderを取得
      */
-    getTreeProvider(): PostItTreeProvider {
+    getTreeProvider(): PostItTreeView {
         return this.treeProvider;
     }
 
@@ -73,5 +70,5 @@ export class PostItManager {
     }
 }
 
-// 後方互換性のため、従来のPostItProviderもエクスポート
-export const PostItProvider = PostItTreeProvider;
+// 後方互換性のため、従来のPostItProviderもエクスポート（PostItManagerを参照）
+export const PostItProvider = PostItManager;

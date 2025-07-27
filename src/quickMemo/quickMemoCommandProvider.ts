@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { QuickMemoStorage, QuickMemoFile } from './quickMemoStorage';
-import { QuickMemoTreeProvider } from './quickMemoTreeProvider';
+import { BaseTreeProvider } from '../modules';
+import { QuickMemoTreeItem } from './quickMemoTreeItem';
 
 /**
  * QuickMemo機能のコマンド処理を管理するクラス
@@ -8,7 +9,7 @@ import { QuickMemoTreeProvider } from './quickMemoTreeProvider';
 export class QuickMemoCommandProvider {
     constructor(
         private storage: QuickMemoStorage,
-        private treeProvider: QuickMemoTreeProvider,
+        private treeProvider: BaseTreeProvider<QuickMemoFile, QuickMemoTreeItem>,
         private context: vscode.ExtensionContext
     ) {}
 

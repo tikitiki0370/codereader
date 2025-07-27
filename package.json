@@ -52,6 +52,10 @@
         "title": "Rename Folder"
       },
       {
+        "command": "codereader.deleteFolder",
+        "title": "Delete Folder"
+      },
+      {
         "command": "codereader.codeCopy",
         "title": "Copy Selected Lines"
       },
@@ -116,6 +120,38 @@
       {
         "command": "codereader.openDiagnosticsLocation",
         "title": "Open Location"
+      },
+      {
+        "command": "codereader.addLineHighlight",
+        "title": "CodeMarker: Highlight Lines"
+      },
+      {
+        "command": "codereader.deleteCodeMarkerLineHighlight",
+        "title": "Delete Line Highlight"
+      },
+      {
+        "command": "codereader.openLineHighlightLocation",
+        "title": "Open Location"
+      },
+      {
+        "command": "codereader.addSyntaxHighlight",
+        "title": "CodeMarker: Greyout Lines"
+      },
+      {
+        "command": "codereader.deleteCodeMarkerSyntaxHighlight",
+        "title": "Delete Syntax Highlight"
+      },
+      {
+        "command": "codereader.openSyntaxHighlightLocation",
+        "title": "Open Location"
+      },
+      {
+        "command": "codereader.toggleSyntaxHighlightUp",
+        "title": "CodeMarker: Toggle Line and Move Up"
+      },
+      {
+        "command": "codereader.toggleSyntaxHighlightDown",
+        "title": "CodeMarker: Toggle Line and Move Down"
       }
     ],
     "menus": {
@@ -194,6 +230,16 @@
         {
           "command": "codereader.clearAllDiagnostics",
           "group": "codemarker@5"
+        },
+        {
+          "command": "codereader.addLineHighlight",
+          "group": "codemarker@6",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.addSyntaxHighlight",
+          "group": "codemarker@7",
+          "when": "editorHasSelection || editorTextFocus"
         }
       ],
       "view/item/context": [
@@ -216,6 +262,11 @@
           "command": "codereader.renameFolder",
           "when": "view == codeReaderPostIt && viewItem == postItFolder",
           "group": "folder@2"
+        },
+        {
+          "command": "codereader.deleteFolder",
+          "when": "view == codeReaderPostIt && viewItem == postItFolder",
+          "group": "folder@3"
         },
         {
           "command": "codereader.deleteQuickMemo",
@@ -241,6 +292,16 @@
           "command": "codereader.deleteCodeMarkerDiagnostics",
           "when": "view == codeReaderCodeMarker && viewItem == codeMarkerDiagnostics",
           "group": "diagnostics@1"
+        },
+        {
+          "command": "codereader.deleteCodeMarkerLineHighlight",
+          "when": "view == codeReaderCodeMarker && viewItem == codeMarkerLineHighlight",
+          "group": "lineHighlight@1"
+        },
+        {
+          "command": "codereader.deleteCodeMarkerSyntaxHighlight",
+          "when": "view == codeReaderCodeMarker && viewItem == codeMarkerSyntaxHighlight",
+          "group": "syntaxHighlight@1"
         }
       ],
       "view/title": [
@@ -307,7 +368,19 @@
           "description": "Format template for copying selected lines. Use {filepath}, {startLine}, {endLine}, {code} as placeholders. Use \\n for line breaks."
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "codereader.toggleSyntaxHighlightUp",
+        "key": "ctrl+alt+up",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "codereader.toggleSyntaxHighlightDown",
+        "key": "ctrl+alt+down",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",

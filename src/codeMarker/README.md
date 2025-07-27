@@ -12,6 +12,7 @@ codeMarker はコードに対して目印をつける目的で利用されます
    - 右クリックのメニューから選択範囲を上のようにできるようにする
 3. シンタックス highlight を上書きしてコードをグレーアウトする機能
    - これも右クリックから呼び出せるようにする
+   - 将来的には特定のキーを押した状態で行を移動したときに自動的にグレーアウトするようにする
 
 ## tree
 
@@ -19,6 +20,7 @@ codeMarker はコードに対して目印をつける目的で利用されます
 tree の表示は 1.2.3 どれも同じように表示しますが。icon はそれぞれの機能に合わせて設定します。とりあえずは任意のアイコンを割り当てておいてください。
 また。ほかの拡張と同様にfolder を任意に作成できるようにしてください
 この辺りはpostItが参考になると思います。
+3については例外で、ファイルに対して1つしか設定できません。
 
 ## データについて
 
@@ -31,7 +33,7 @@ export interface CodeMarker {
             [filePath: string]: {
                 Diagnostics: CodeMarkerDiagnostics[], // Diagnostics 機能によるインラインコメント
                 LineHighlight: CodeMarkerLineHighlight[], // 行全体をハイライトする
-                SyntaxHighlight: CodeMarkerSyntaxHighlight[]; // シンタックスhighlightを上書きしてコードをグレーアウトする
+                SyntaxHighlight: CodeMarkerSyntaxHighlight; // シンタックスhighlightを上書きしてコードをグレーアウトする
 
         },  // filePath = 対象のファイル
 }
@@ -81,7 +83,7 @@ export interface CodeMarkerLine {
 export interface CodeMarkerSyntaxHighlight {
     id: string;
     color: string; // 色
-    Lines: CodeMarkerLine[]; // 対象の行
+    Lines: number[]; // 対象の行番号
     createdAt: Date;
     updatedAt: Date;
 }

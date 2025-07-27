@@ -4,7 +4,7 @@ export interface CodeMarker {
             [filePath: string]: {
                 Diagnostics: CodeMarkerDiagnostics[];
                 LineHighlight: CodeMarkerLineHighlight[];
-                SyntaxHighlight: CodeMarkerSyntaxHighlight[];
+                SyntaxHighlight: CodeMarkerSyntaxHighlight | null;
             };
         };
     };
@@ -55,7 +55,7 @@ export interface CodeMarkerLine {
 export interface CodeMarkerSyntaxHighlight {
     id: string;
     color: string;
-    Lines: CodeMarkerLine[];
+    Lines: number[];
     createdAt: Date;
     updatedAt: Date;
 }

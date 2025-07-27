@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { PostItManager, PostItStorage, PostItCommandProvider } from './postIt';
-import { QuickMemoStorage, QuickMemoTreeProvider, QuickMemoCommandProvider } from './quickMemo';
+import { PostItManager, PostItStorage, PostItCommandProvider, PostItTreeView } from './postIt';
+import { QuickMemoStorage, QuickMemoTreeView, QuickMemoCommandProvider } from './quickMemo';
 import { StateController } from './stateController';
 import { CodeCopy } from './codeCopy';
-import { CodeMarkerStorage, DiagnosticsManager, CodeMarkerTreeProvider, CodeMarkerCommandProvider } from './codeMarker';
+import { CodeMarkerStorage, DiagnosticsManager, LineHighlightManager, SyntaxHighlightManager, CodeMarkerTreeView, CodeMarkerCommandProvider } from './codeMarker';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension activate called');
@@ -16,7 +16,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	let quickMemoStorage: QuickMemoStorage;
 	let codeMarkerStorage: CodeMarkerStorage;
 	let diagnosticsManager: DiagnosticsManager;
-	let codeMarkerTreeProvider: CodeMarkerTreeProvider;
+	let lineHighlightManager: LineHighlightManager;
+	let syntaxHighlightManager: SyntaxHighlightManager;
 	
 	// PostIt用のGutter Decorationを作成
 	const postItDecorationType = vscode.window.createTextEditorDecorationType({
@@ -30,6 +31,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		stateController = StateController.getInstance(context);
 		await stateController.initialize();
 		console.log('StateController initialized successfully');
+		console.log('Storage location:', context.storageUri?.toString());
 		
 		// PostItStorageを初期化
 		postItStorage = new PostItStorage(stateController);
@@ -45,8 +47,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		// DiagnosticsManagerを初期化
 		diagnosticsManager = new DiagnosticsManager(codeMarkerStorage, context);
 		
-		// CodeMarkerTreeProviderを初期化
-		codeMarkerTreeProvider = new CodeMarkerTreeProvider(codeMarkerStorage);
+		// LineHighlightManagerを初期化
+		lineHighlightManager = new LineHighlightManager(codeMarkerStorage, context);
+		
+		// SyntaxHighlightManagerを初期化
+		syntaxHighlightManager = new SyntaxHighlightManager(codeMarkerStorage, context);
+		
 		console.log('CodeMarker initialized successfully');
 	} catch (error) {
 		console.error('Failed to initialize StateController:', error);
@@ -58,31 +64,41 @@ export async function activate(context: vscode.ExtensionContext) {
 	const postItManager = new PostItManager(postItStorage);
 	postItManager.registerProviders(context);
 
-	// QuickMemoTreeProviderを作成・登録
-	const quickMemoTreeProvider = new QuickMemoTreeProvider(quickMemoStorage);
-	vscode.window.registerTreeDataProvider('codeReaderQuickMemo', quickMemoTreeProvider);
+	// QuickMemoTreeViewを作成・登録（新しいBaseTreeProvider使用版）
+	const quickMemoTreeView = new QuickMemoTreeView(quickMemoStorage);
+	vscode.window.createTreeView('codeReaderQuickMemo', {
+		treeDataProvider: quickMemoTreeView,
+		dragAndDropController: quickMemoTreeView
+	});
 
-	// CodeMarkerTreeProviderを登録
-	vscode.window.registerTreeDataProvider('codeReaderCodeMarker', codeMarkerTreeProvider);
+	// CodeMarkerTreeViewを登録（新しいBaseTreeProvider使用版）
+	const codeMarkerTreeView = new CodeMarkerTreeView(codeMarkerStorage);
+	vscode.window.createTreeView('codeReaderCodeMarker', {
+		treeDataProvider: codeMarkerTreeView,
+		dragAndDropController: codeMarkerTreeView
+	});
 
 	// CommandProviderを作成
 	const postItCommandProvider = new PostItCommandProvider(
 		postItStorage,
 		postItManager,
 		postItDecorationType,
-		context
+		context,
+		postItManager.getTreeProvider()
 	);
 
 	const quickMemoCommandProvider = new QuickMemoCommandProvider(
 		quickMemoStorage,
-		quickMemoTreeProvider,
+		quickMemoTreeView,
 		context
 	);
 
 	const codeMarkerCommandProvider = new CodeMarkerCommandProvider(
 		codeMarkerStorage,
 		diagnosticsManager,
-		codeMarkerTreeProvider,
+		lineHighlightManager,
+		syntaxHighlightManager,
+		codeMarkerTreeView,
 		context
 	);
 

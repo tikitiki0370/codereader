@@ -12,7 +12,8 @@ export class PostItCommandProvider {
         private storage: PostItStorage,
         private manager: PostItManager,
         private postItDecorationType: vscode.TextEditorDecorationType,
-        private context: vscode.ExtensionContext
+        private context: vscode.ExtensionContext,
+        private treeView?: any // PostItTreeView (循環参照回避のためany)
     ) {}
 
     /**
@@ -28,6 +29,7 @@ export class PostItCommandProvider {
             vscode.commands.registerCommand('codereader.createFolder', this.createFolder.bind(this)),
             vscode.commands.registerCommand('codereader.createSubFolder', this.createSubFolder.bind(this)),
             vscode.commands.registerCommand('codereader.renameFolder', this.renameFolder.bind(this)),
+            vscode.commands.registerCommand('codereader.deleteFolder', this.deleteFolder.bind(this)),
             vscode.commands.registerCommand('codereader.deletePostIt', this.deletePostIt.bind(this)),
             vscode.commands.registerCommand('codereader.togglePostItFold', this.togglePostItFold.bind(this)),
             vscode.commands.registerCommand('codereader.openPostItLocation', this.openPostItLocation.bind(this))
@@ -85,8 +87,10 @@ export class PostItCommandProvider {
      * PostItを作成するコマンド
      */
     private async createPostIt(): Promise<void> {
+        console.log('PostItCommandProvider.createPostIt called');
         try {
             const editor = vscode.window.activeTextEditor;
+            console.log('Active editor:', !!editor);
             if (!editor) {
                 vscode.window.showWarningMessage('No active editor found');
                 return;
@@ -448,7 +452,7 @@ export class PostItCommandProvider {
     }
 
     /**
-     * フォルダ作成コマンド（従来版）
+     * フォルダ作成コマンド（TreeView経由）
      */
     private async createFolder(): Promise<void> {
         try {
@@ -468,14 +472,18 @@ export class PostItCommandProvider {
 
             if (folderPath) {
                 const trimmedPath = folderPath.trim();
-                const success = await this.storage.createFolder(trimmedPath);
+                
+                // TreeView経由でフォルダ作成
+                const success = this.treeView 
+                    ? await this.treeView.createFolder(trimmedPath)
+                    : await this.storage.createFolder(trimmedPath);
                 
                 if (success) {
                     // 最後に使用したフォルダとして記録
                     await this.storage.updateConfig({ lastedFolder: trimmedPath });
                     vscode.window.showInformationMessage(`Created folder: ${trimmedPath}`);
                     
-                    // サイドバーを更新
+                    // 従来のTreeProviderも更新
                     this.manager.getTreeProvider().refresh();
                 } else {
                     vscode.window.showWarningMessage(`Folder "${trimmedPath}" already exists`);
@@ -515,14 +523,18 @@ export class PostItCommandProvider {
             if (subFolderName) {
                 const trimmedName = subFolderName.trim();
                 const fullPath = `${parentPath}/${trimmedName}`;
-                const success = await this.storage.createFolder(fullPath);
+                
+                // TreeView経由でフォルダ作成
+                const success = this.treeView 
+                    ? await this.treeView.createFolder(fullPath)
+                    : await this.storage.createFolder(fullPath);
                 
                 if (success) {
                     // 最後に使用したフォルダとして記録
                     await this.storage.updateConfig({ lastedFolder: fullPath });
                     vscode.window.showInformationMessage(`Created subfolder: ${fullPath}`);
                     
-                    // サイドバーを更新
+                    // 従来のTreeProviderも更新
                     this.manager.getTreeProvider().refresh();
                 } else {
                     vscode.window.showWarningMessage(`Subfolder "${fullPath}" already exists`);
@@ -574,12 +586,15 @@ export class PostItCommandProvider {
                 pathParts[pathParts.length - 1] = trimmedName;
                 const newPath = pathParts.join('/');
                 
-                const success = await this.storage.renameFolder(oldPath, newPath);
+                // TreeView経由でフォルダリネーム
+                const success = this.treeView 
+                    ? await this.treeView.renameFolder(oldPath, newPath)
+                    : await this.storage.renameFolder(oldPath, newPath);
                 
                 if (success) {
                     vscode.window.showInformationMessage(`Renamed folder: ${oldPath} → ${newPath}`);
                     
-                    // サイドバーを更新
+                    // 従来のTreeProviderも更新
                     this.manager.getTreeProvider().refresh();
                 } else {
                     vscode.window.showWarningMessage(`Failed to rename folder: "${newPath}" already exists or operation not allowed`);
@@ -620,6 +635,53 @@ export class PostItCommandProvider {
 
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to delete PostIt: ${error}`);
+        }
+    }
+
+    /**
+     * フォルダ削除コマンド
+     */
+    private async deleteFolder(item: any): Promise<void> {
+        try {
+            if (!item || !item.folderPath) {
+                vscode.window.showErrorMessage('Invalid folder item');
+                return;
+            }
+
+            const folderPath = item.folderPath;
+            
+            // デフォルトフォルダは削除不可
+            if (folderPath === 'Default') {
+                vscode.window.showWarningMessage('Cannot delete the Default folder');
+                return;
+            }
+
+            // 確認ダイアログを表示
+            const answer = await vscode.window.showWarningMessage(
+                `Delete folder "${folderPath}" and all its PostIts?`,
+                { modal: true },
+                'Delete',
+                'Cancel'
+            );
+
+            if (answer === 'Delete') {
+                // TreeView経由でフォルダ削除
+                const success = this.treeView 
+                    ? await this.treeView.deleteFolder(folderPath)
+                    : await this.storage.deleteFolder(folderPath);
+                
+                if (success) {
+                    vscode.window.showInformationMessage(`Deleted folder: ${folderPath}`);
+                    
+                    // 従来のTreeProviderも更新
+                    this.manager.getTreeProvider().refresh();
+                } else {
+                    vscode.window.showWarningMessage(`Failed to delete folder: ${folderPath}`);
+                }
+            }
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to delete folder: ${error}`);
         }
     }
 

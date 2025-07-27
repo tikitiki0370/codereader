@@ -70,7 +70,7 @@ export class PostItStorage {
         const data = await this.stateController.get(PostItStorage.TOOL_NAME);
         if (!data) {
             // 初期データ構造を作成
-            return {
+            const initialData = {
                 PostIts: {
                     [PostItStorage.DEFAULT_FOLDER]: []  // デフォルトフォルダを作成
                 },
@@ -79,6 +79,11 @@ export class PostItStorage {
                 },
                 Version: PostItStorage.CURRENT_VERSION
             };
+            
+            // 初期データを保存
+            await this.savePostItData(initialData);
+            console.log('PostIt initial data created and saved');
+            return initialData;
         }
         return data;
     }
@@ -117,8 +122,17 @@ export class PostItStorage {
     
     // フォルダ一覧を取得
     async getFolders(): Promise<string[]> {
-        const data = await this.getPostItData();
-        return Object.keys(data.PostIts);
+        console.log('PostItStorage.getFolders called');
+        try {
+            const data = await this.getPostItData();
+            console.log('PostIt data:', data);
+            const folders = Object.keys(data.PostIts);
+            console.log('PostIt folders from storage:', folders);
+            return folders;
+        } catch (error) {
+            console.error('PostItStorage.getFolders error:', error);
+            throw error;
+        }
     }
     
     // フォルダツリーを取得（階層構造として）
@@ -422,6 +436,43 @@ export class PostItStorage {
             data.Config.lastedFolder = newPath;
         } else if (data.Config.lastedFolder?.startsWith(oldPrefix)) {
             data.Config.lastedFolder = data.Config.lastedFolder.replace(oldPrefix, newPrefix);
+        }
+        
+        await this.savePostItData(data);
+        return true;
+    }
+
+    /**
+     * フォルダを削除
+     * デフォルトフォルダは削除不可
+     */
+    async deleteFolder(folderPath: string): Promise<boolean> {
+        if (folderPath === PostItStorage.DEFAULT_FOLDER) {
+            return false; // デフォルトフォルダは削除不可
+        }
+        
+        const data = await this.getPostItData();
+        
+        if (!data.PostIts[folderPath]) {
+            return false; // フォルダが存在しない
+        }
+        
+        // フォルダを削除
+        delete data.PostIts[folderPath];
+        
+        // サブフォルダも削除
+        const prefix = folderPath + '/';
+        const subfolders = Object.keys(data.PostIts).filter(f => f.startsWith(prefix));
+        
+        for (const subfolder of subfolders) {
+            delete data.PostIts[subfolder];
+        }
+        
+        // 最後に使用したフォルダの更新
+        if (data.Config.lastedFolder === folderPath) {
+            data.Config.lastedFolder = PostItStorage.DEFAULT_FOLDER;
+        } else if (data.Config.lastedFolder?.startsWith(prefix)) {
+            data.Config.lastedFolder = PostItStorage.DEFAULT_FOLDER;
         }
         
         await this.savePostItData(data);

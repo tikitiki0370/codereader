@@ -1,8 +1,12 @@
 import { StateController } from '../stateController';
-import { CodeMarker, CodeMarkerDiagnostics, DiagnosticsTypes, DiagnosticsLine } from './types';
+import { CodeMarker, CodeMarkerDiagnostics, DiagnosticsTypes, DiagnosticsLine, CodeMarkerLineHighlight, CodeMarkerSyntaxHighlight } from './types';
 
 export type CreateCodeMarkerDiagnostics = Omit<CodeMarkerDiagnostics, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateCodeMarkerDiagnostics = Partial<Omit<CodeMarkerDiagnostics, 'id' | 'createdAt'>>;
+export type CreateCodeMarkerLineHighlight = Omit<CodeMarkerLineHighlight, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateCodeMarkerLineHighlight = Partial<Omit<CodeMarkerLineHighlight, 'id' | 'createdAt'>>;
+export type CreateCodeMarkerSyntaxHighlight = Omit<CodeMarkerSyntaxHighlight, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateCodeMarkerSyntaxHighlight = Partial<Omit<CodeMarkerSyntaxHighlight, 'id' | 'createdAt'>>;
 
 export class CodeMarkerStorage {
     private static readonly TOOL_NAME = 'codeMarker';
@@ -27,6 +31,11 @@ export class CodeMarkerStorage {
             };
         }
         return data;
+    }
+    
+    // エイリアス（LineHighlightManagerで使用）
+    async getData(): Promise<CodeMarker> {
+        return this.getCodeMarkerData();
     }
     
     // CodeMarkerデータ全体を保存
@@ -185,7 +194,7 @@ export class CodeMarkerStorage {
         for (const fileData of Object.values(data.CodeMarker[folder])) {
             if ((fileData.Diagnostics && fileData.Diagnostics.length > 0) ||
                 (fileData.LineHighlight && fileData.LineHighlight.length > 0) ||
-                (fileData.SyntaxHighlight && fileData.SyntaxHighlight.length > 0)) {
+                (fileData.SyntaxHighlight && fileData.SyntaxHighlight.Lines && fileData.SyntaxHighlight.Lines.length > 0)) {
                 return false;
             }
         }
@@ -211,7 +220,7 @@ export class CodeMarkerStorage {
             data.CodeMarker[folder][filePath] = {
                 Diagnostics: [],
                 LineHighlight: [],
-                SyntaxHighlight: []
+                SyntaxHighlight: null
             };
         }
         
@@ -272,7 +281,7 @@ export class CodeMarkerStorage {
         const fileData = data.CodeMarker[folder][filePath];
         if (fileData.Diagnostics.length === 0 &&
             fileData.LineHighlight.length === 0 &&
-            fileData.SyntaxHighlight.length === 0) {
+            (!fileData.SyntaxHighlight || !fileData.SyntaxHighlight.Lines || fileData.SyntaxHighlight.Lines.length === 0)) {
             delete data.CodeMarker[folder][filePath];
             
             // フォルダが空になった場合、フォルダエントリを削除（デフォルトフォルダ以外）
@@ -322,5 +331,212 @@ export class CodeMarkerStorage {
     // IDを生成
     private generateId(): string {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+    
+    // LineHighlight関連のメソッド
+    
+    // LineHighlightを追加
+    async addLineHighlight(
+        folder: string,
+        filePath: string,
+        lineHighlight: CodeMarkerLineHighlight
+    ): Promise<void> {
+        const data = await this.getCodeMarkerData();
+        
+        // フォルダが無い場合は作成
+        if (!data.CodeMarker[folder]) {
+            data.CodeMarker[folder] = {};
+        }
+        
+        // ファイルのエントリが無い場合は作成
+        if (!data.CodeMarker[folder][filePath]) {
+            data.CodeMarker[folder][filePath] = {
+                Diagnostics: [],
+                LineHighlight: [],
+                SyntaxHighlight: null
+            };
+        }
+        
+        data.CodeMarker[folder][filePath].LineHighlight.push(lineHighlight);
+        await this.saveCodeMarkerData(data);
+    }
+    
+    // LineHighlightを削除
+    async deleteLineHighlight(folder: string, filePath: string, id: string): Promise<boolean> {
+        const data = await this.getCodeMarkerData();
+        
+        if (!data.CodeMarker[folder]?.[filePath]) {
+            return false;
+        }
+        
+        const initialLength = data.CodeMarker[folder][filePath].LineHighlight.length;
+        data.CodeMarker[folder][filePath].LineHighlight = 
+            data.CodeMarker[folder][filePath].LineHighlight.filter(h => h.id !== id);
+        
+        // ファイルのすべてのマーカーが空になった場合、ファイルエントリを削除
+        const fileData = data.CodeMarker[folder][filePath];
+        if (fileData.Diagnostics.length === 0 &&
+            fileData.LineHighlight.length === 0 &&
+            (!fileData.SyntaxHighlight || !fileData.SyntaxHighlight.Lines || fileData.SyntaxHighlight.Lines.length === 0)) {
+            delete data.CodeMarker[folder][filePath];
+            
+            // フォルダが空になった場合、フォルダエントリを削除（デフォルトフォルダ以外）
+            if (folder !== CodeMarkerStorage.DEFAULT_FOLDER && 
+                Object.keys(data.CodeMarker[folder]).length === 0) {
+                delete data.CodeMarker[folder];
+            }
+        }
+        
+        await this.saveCodeMarkerData(data);
+        return initialLength !== (data.CodeMarker[folder]?.[filePath]?.LineHighlight.length || 0);
+    }
+    
+    // 特定フォルダの特定ファイルのLineHighlightを取得
+    async getLineHighlightsByFolderAndFile(folder: string, filePath: string): Promise<CodeMarkerLineHighlight[]> {
+        const data = await this.getCodeMarkerData();
+        return data.CodeMarker[folder]?.[filePath]?.LineHighlight || [];
+    }
+    
+    // フォルダ内のLineHighlightを取得
+    async getLineHighlightsByFolder(folder: string): Promise<{ filePath: string; highlights: CodeMarkerLineHighlight[] }[]> {
+        const data = await this.getCodeMarkerData();
+        const result: { filePath: string; highlights: CodeMarkerLineHighlight[] }[] = [];
+        
+        if (!data.CodeMarker[folder]) {
+            return result;
+        }
+        
+        for (const [filePath, fileData] of Object.entries(data.CodeMarker[folder])) {
+            if (fileData.LineHighlight && fileData.LineHighlight.length > 0) {
+                result.push({ filePath, highlights: fileData.LineHighlight });
+            }
+        }
+        
+        return result;
+    }
+    
+    // 全てのLineHighlightを取得
+    async getAllLineHighlights(): Promise<{ folder: string; filePath: string; highlights: CodeMarkerLineHighlight[] }[]> {
+        const data = await this.getCodeMarkerData();
+        const result: { folder: string; filePath: string; highlights: CodeMarkerLineHighlight[] }[] = [];
+        
+        for (const [folder, folderData] of Object.entries(data.CodeMarker)) {
+            for (const [filePath, fileData] of Object.entries(folderData)) {
+                if (fileData.LineHighlight && fileData.LineHighlight.length > 0) {
+                    result.push({ folder, filePath, highlights: fileData.LineHighlight });
+                }
+            }
+        }
+        
+        return result;
+    }
+    
+    // SyntaxHighlight関連のメソッド
+    
+    // SyntaxHighlightを設定（ファイルに1つのみ）
+    async setSyntaxHighlight(
+        folder: string,
+        filePath: string,
+        syntaxHighlight: CodeMarkerSyntaxHighlight
+    ): Promise<void> {
+        const data = await this.getCodeMarkerData();
+        
+        // フォルダが無い場合は作成
+        if (!data.CodeMarker[folder]) {
+            data.CodeMarker[folder] = {};
+        }
+        
+        // ファイルのエントリが無い場合は作成
+        if (!data.CodeMarker[folder][filePath]) {
+            data.CodeMarker[folder][filePath] = {
+                Diagnostics: [],
+                LineHighlight: [],
+                SyntaxHighlight: null
+            };
+        }
+        
+        // ファイルに1つのSyntaxHighlightのみ設定
+        data.CodeMarker[folder][filePath].SyntaxHighlight = syntaxHighlight;
+        await this.saveCodeMarkerData(data);
+    }
+    
+    // SyntaxHighlightを削除
+    async deleteSyntaxHighlight(folder: string, filePath: string): Promise<boolean> {
+        const data = await this.getCodeMarkerData();
+        
+        if (!data.CodeMarker[folder]?.[filePath]) {
+            return false;
+        }
+        
+        const syntaxHighlight = data.CodeMarker[folder][filePath].SyntaxHighlight;
+        const hadSyntaxHighlight = syntaxHighlight !== null && 
+                                   syntaxHighlight.Lines &&
+                                   syntaxHighlight.Lines.length > 0;
+        
+        // SyntaxHighlightを削除
+        data.CodeMarker[folder][filePath].SyntaxHighlight = null;
+        
+        // ファイルのすべてのマーカーが空になった場合、ファイルエントリを削除
+        const fileData = data.CodeMarker[folder][filePath];
+        if (fileData.Diagnostics.length === 0 &&
+            fileData.LineHighlight.length === 0 &&
+            (!fileData.SyntaxHighlight || !fileData.SyntaxHighlight.Lines || fileData.SyntaxHighlight.Lines.length === 0)) {
+            delete data.CodeMarker[folder][filePath];
+            
+            // フォルダが空になった場合、フォルダエントリを削除（デフォルトフォルダ以外）
+            if (folder !== CodeMarkerStorage.DEFAULT_FOLDER && 
+                Object.keys(data.CodeMarker[folder]).length === 0) {
+                delete data.CodeMarker[folder];
+            }
+        }
+        
+        await this.saveCodeMarkerData(data);
+        return hadSyntaxHighlight;
+    }
+    
+    // 特定フォルダの特定ファイルのSyntaxHighlightを取得
+    async getSyntaxHighlightByFolderAndFile(folder: string, filePath: string): Promise<CodeMarkerSyntaxHighlight | null> {
+        const data = await this.getCodeMarkerData();
+        const syntaxHighlight = data.CodeMarker[folder]?.[filePath]?.SyntaxHighlight;
+        
+        if (syntaxHighlight && syntaxHighlight.Lines && syntaxHighlight.Lines.length > 0) {
+            return syntaxHighlight;
+        }
+        
+        return null;
+    }
+    
+    // フォルダ内のSyntaxHighlightを取得
+    async getSyntaxHighlightsByFolder(folder: string): Promise<{ filePath: string; syntaxHighlight: CodeMarkerSyntaxHighlight }[]> {
+        const data = await this.getCodeMarkerData();
+        const result: { filePath: string; syntaxHighlight: CodeMarkerSyntaxHighlight }[] = [];
+        
+        if (!data.CodeMarker[folder]) {
+            return result;
+        }
+        
+        for (const [filePath, fileData] of Object.entries(data.CodeMarker[folder])) {
+            if (fileData.SyntaxHighlight && fileData.SyntaxHighlight.Lines && fileData.SyntaxHighlight.Lines.length > 0) {
+                result.push({ filePath, syntaxHighlight: fileData.SyntaxHighlight });
+            }
+        }
+        
+        return result;
+    }
+    
+    // 全てのSyntaxHighlightを取得
+    async getAllSyntaxHighlights(): Promise<{ folder: string; filePath: string; syntaxHighlight: CodeMarkerSyntaxHighlight }[]> {
+        const data = await this.getCodeMarkerData();
+        const result: { folder: string; filePath: string; syntaxHighlight: CodeMarkerSyntaxHighlight }[] = [];
+        
+        for (const [folder, folderData] of Object.entries(data.CodeMarker)) {
+            for (const [filePath, fileData] of Object.entries(folderData)) {
+                if (fileData.SyntaxHighlight && fileData.SyntaxHighlight.Lines && fileData.SyntaxHighlight.Lines.length > 0) {
+                    result.push({ folder, filePath, syntaxHighlight: fileData.SyntaxHighlight });
+                }
+            }
+        }
+        
+        return result;
     }
 }

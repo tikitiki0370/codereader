@@ -114,6 +114,12 @@ export class QuickMemoStorage {
         return Object.keys(data.QuickMemos).sort();
     }
     
+    // 指定フォルダのメモ一覧を取得
+    async getMemosByFolder(folderName: string): Promise<QuickMemoFile[]> {
+        const data = await this.getQuickMemoData();
+        return data.QuickMemos[folderName] || [];
+    }
+    
     // メモの追加（フォルダー指定）
     async addMemoToFolder(folderName: string, title: string, links: string[] = []): Promise<QuickMemoFile> {
         const data = await this.getQuickMemoData();
