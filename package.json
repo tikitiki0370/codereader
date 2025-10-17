@@ -364,8 +364,8 @@
       "properties": {
         "codereader.codeCopy.format": {
           "type": "string",
-          "default": "`{filepath}` {startLine}行目～{endLine}行目\\n```\\n{code}\\n```",
-          "description": "Format template for copying selected lines. Use {filepath}, {startLine}, {endLine}, {code} as placeholders. Use \\n for line breaks."
+          "default": "`{filepath}` {startLine}行目～{endLine}行目\\n```{codetype}\\n{code}\\n```",
+          "description": "Format template for copying selected lines. Use {filepath}, {startLine}, {endLine}, {code}, {codetype} as placeholders. Use \\n for line breaks."
         }
       }
     },

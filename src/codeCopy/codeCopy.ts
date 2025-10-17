@@ -23,13 +23,17 @@ export class CodeCopy {
         
         // Always use relative path from workspace root
         const filepath = vscode.workspace.asRelativePath(document.uri);
+        
+        // Get language ID from VS Code (e.g., 'typescript', 'python', 'javascript')
+        const codetype = document.languageId;
 
         const format = CodeCopyConfigManager.getFormat();
         const formattedText = CodeCopy.formatText(format, {
             filepath,
             startLine: startLine.toString(),
             endLine: endLine.toString(),
-            code: selectedText
+            code: selectedText,
+            codetype
         });
 
         await vscode.env.clipboard.writeText(formattedText);

@@ -6,7 +6,7 @@ export interface CodeCopyConfig {
 
 export class CodeCopyConfigManager {
     private static readonly CONFIG_SECTION = 'codereader';
-    private static readonly DEFAULT_FORMAT = '`{filepath}` {startLine}行目～{endLine}行目\n```\n{code}\n```';
+    private static readonly DEFAULT_FORMAT = '`{filepath}` {startLine}行目～{endLine}行目\n```{codetype}\n{code}\n```';
 
     static getFormat(): string {
         const config = vscode.workspace.getConfiguration(CodeCopyConfigManager.CONFIG_SECTION);
