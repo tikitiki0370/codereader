@@ -89,7 +89,11 @@ export class SyntaxHighlightManager {
      * エディタにSyntaxHighlightを適用
      */
     private applySyntaxHighlightToEditor(editor: vscode.TextEditor): void {
-        const filePath = editor.document.uri.fsPath;
+        // ファイルパスを相対パスで取得
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+        const filePath = workspaceFolder
+            ? vscode.workspace.asRelativePath(editor.document.uri)
+            : editor.document.fileName;
 
         // 既存のデコレーションをクリア
         editor.setDecorations(this.greyoutDecorationType, []);
@@ -167,8 +171,14 @@ export class SyntaxHighlightManager {
 
         // エディタに即座に反映
         const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document.uri.fsPath === filePath) {
-            this.applySyntaxHighlightToEditor(editor);
+        if (editor) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+            const editorFilePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(editor.document.uri)
+                : editor.document.fileName;
+            if (editorFilePath === filePath) {
+                this.applySyntaxHighlightToEditor(editor);
+            }
         }
     }
 
@@ -231,10 +241,16 @@ export class SyntaxHighlightManager {
 
         // エディタに即座に反映
         const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document.uri.fsPath === filePath) {
-            this.applySyntaxHighlightToEditor(editor);
+        if (editor) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+            const editorFilePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(editor.document.uri)
+                : editor.document.fileName;
+            if (editorFilePath === filePath) {
+                this.applySyntaxHighlightToEditor(editor);
+            }
         }
-        
+
         return isAdded;
     }
 
@@ -249,8 +265,14 @@ export class SyntaxHighlightManager {
 
         // エディタに即座に反映
         const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document.uri.fsPath === filePath) {
-            this.applySyntaxHighlightToEditor(editor);
+        if (editor) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+            const editorFilePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(editor.document.uri)
+                : editor.document.fileName;
+            if (editorFilePath === filePath) {
+                this.applySyntaxHighlightToEditor(editor);
+            }
         }
     }
 

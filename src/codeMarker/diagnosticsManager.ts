@@ -57,7 +57,12 @@ export class DiagnosticsManager {
         
         // ファイルごとにDiagnosticsを設定
         for (const [filePath, fileData] of fileMap) {
-            const uri = vscode.Uri.file(filePath);
+            // 相対パスから絶対パスを取得
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const absolutePath = workspaceFolder
+                ? vscode.Uri.joinPath(workspaceFolder.uri, filePath).fsPath
+                : filePath;
+            const uri = vscode.Uri.file(absolutePath);
             this.diagnosticCollection.set(uri, fileData.vsDiagnostics);
             this.diagnosticsMap.set(filePath, fileData.diagMap);
         }
@@ -93,7 +98,12 @@ export class DiagnosticsManager {
     
     // 特定のファイルのDiagnosticsを更新
     async refreshFileDiagnostics(filePath: string): Promise<void> {
-        const uri = vscode.Uri.file(filePath);
+        // 相対パスから絶対パスを取得
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const absolutePath = workspaceFolder
+            ? vscode.Uri.joinPath(workspaceFolder.uri, filePath).fsPath
+            : filePath;
+        const uri = vscode.Uri.file(absolutePath);
         
         // 全フォルダから該当ファイルのDiagnosticsを取得
         const diagnostics = await this.storage.getDiagnosticsByFile(filePath);
@@ -171,7 +181,11 @@ export class DiagnosticsManager {
     
     // 現在のカーソル位置のDiagnosticsを取得
     getDiagnosticsAtPosition(document: vscode.TextDocument, position: vscode.Position): { folder: string; diagnostics: CodeMarkerDiagnostics }[] {
-        const filePath = document.uri.fsPath;
+        // ファイルパスを相対パスで取得
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        const filePath = workspaceFolder
+            ? vscode.workspace.asRelativePath(document.uri)
+            : document.fileName;
         const diagMap = this.diagnosticsMap.get(filePath);
         
         if (!diagMap) {

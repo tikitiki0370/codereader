@@ -78,8 +78,11 @@ export class CodeMarkerCommandProvider {
                     return; // キャンセルされた場合
                 }
 
-                // ファイルパスを取得
-                const filePath = document.uri.fsPath;
+                // ファイルパスを相対パスで取得
+                const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+                const filePath = workspaceFolder
+                    ? vscode.workspace.asRelativePath(document.uri)
+                    : document.fileName;
                 
                 let startLine: number;
                 let endLine: number;
@@ -375,7 +378,12 @@ export class CodeMarkerCommandProvider {
      */
     private async openDiagnosticsLocation(diagnostics: any, filePath: string): Promise<void> {
         try {
-            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+            // 相対パスから絶対パスを取得
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const absolutePath = workspaceFolder
+                ? vscode.Uri.joinPath(workspaceFolder.uri, filePath).fsPath
+                : filePath;
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
             const editor = await vscode.window.showTextDocument(document);
             
             const startPosition = new vscode.Position(diagnostics.Lines.startLine - 1, diagnostics.Lines.startColumn);
@@ -418,9 +426,12 @@ export class CodeMarkerCommandProvider {
             if (!selectedColor) {
                 return; // キャンセルされた場合
             }
-            
-            // ファイルパスを取得
-            const filePath = document.uri.fsPath;
+
+            // ファイルパスを相対パスで取得
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+            const filePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(document.uri)
+                : document.fileName;
             
             let startLine: number;
             let endLine: number;
@@ -498,7 +509,12 @@ export class CodeMarkerCommandProvider {
      */
     private async openLineHighlightLocation(highlight: any, filePath: string): Promise<void> {
         try {
-            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+            // 相対パスから絶対パスを取得
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const absolutePath = workspaceFolder
+                ? vscode.Uri.joinPath(workspaceFolder.uri, filePath).fsPath
+                : filePath;
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
             const editor = await vscode.window.showTextDocument(document);
             
             // 最初の行を基準にカーソルを移動
@@ -527,10 +543,13 @@ export class CodeMarkerCommandProvider {
 
             const document = editor.document;
             const selection = editor.selection;
-            
-            // ファイルパスを取得
-            const filePath = document.uri.fsPath;
-            
+
+            // ファイルパスを相対パスで取得
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+            const filePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(document.uri)
+                : document.fileName;
+
             // 既存のSyntaxHighlightがあるかチェック（情報表示のみ）
             const existingSyntaxHighlight = await this.syntaxHighlightManager.getSyntaxHighlight(filePath);
             if (existingSyntaxHighlight) {
@@ -619,7 +638,12 @@ export class CodeMarkerCommandProvider {
      */
     private async openSyntaxHighlightLocation(syntaxHighlight: any, filePath: string): Promise<void> {
         try {
-            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+            // 相対パスから絶対パスを取得
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const absolutePath = workspaceFolder
+                ? vscode.Uri.joinPath(workspaceFolder.uri, filePath).fsPath
+                : filePath;
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
             const editor = await vscode.window.showTextDocument(document);
             
             // 最初の行を基準にカーソルを移動
@@ -654,9 +678,12 @@ export class CodeMarkerCommandProvider {
                 const newPosition = new vscode.Position(currentLine - 1, currentPosition.character);
                 editor.selection = new vscode.Selection(newPosition, newPosition);
                 editor.revealRange(new vscode.Range(newPosition, newPosition));
-                
-                // 元の行（移動前）をtoggle
-                const filePath = document.uri.fsPath;
+
+                // 元の行（移動前）をtoggle - 相対パスで取得
+                const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+                const filePath = workspaceFolder
+                    ? vscode.workspace.asRelativePath(document.uri)
+                    : document.fileName;
                 const targetFolder = await this.storage.getValidLastedFolder();
                 const isAdded = await this.syntaxHighlightManager.toggleLine(
                     targetFolder,
@@ -693,20 +720,23 @@ export class CodeMarkerCommandProvider {
                 const newPosition = new vscode.Position(currentLine + 1, currentPosition.character);
                 editor.selection = new vscode.Selection(newPosition, newPosition);
                 editor.revealRange(new vscode.Range(newPosition, newPosition));
-                
-                // 元の行（移動前）をtoggle
-                const filePath = document.uri.fsPath;
+
+                // 元の行（移動前）をtoggle - 相対パスで取得
+                const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+                const filePath = workspaceFolder
+                    ? vscode.workspace.asRelativePath(document.uri)
+                    : document.fileName;
                 const targetFolder = await this.storage.getValidLastedFolder();
                 const isAdded = await this.syntaxHighlightManager.toggleLine(
                     targetFolder,
                     filePath,
                     currentLine + 1 // 1ベース
                 );
-                
+
                 // ツリーを更新
                 this.treeProvider.refresh();
             }
-            
+
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to toggle syntax highlight: ${error}`);
         }

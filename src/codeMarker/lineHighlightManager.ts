@@ -109,7 +109,11 @@ export class LineHighlightManager {
      * エディタにハイライトを適用（表示順序を考慮）
      */
     private applyHighlightsToEditor(editor: vscode.TextEditor): void {
-        const filePath = editor.document.uri.fsPath;
+        // ファイルパスを相対パスで取得
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+        const filePath = workspaceFolder
+            ? vscode.workspace.asRelativePath(editor.document.uri)
+            : editor.document.fileName;
 
         // 既存のデコレーションをクリア
         this.decorationTypes.forEach(decorationType => {
@@ -195,8 +199,14 @@ export class LineHighlightManager {
 
         // エディタに即座に反映
         const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document.uri.fsPath === filePath) {
-            this.applyHighlightsToEditor(editor);
+        if (editor) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+            const editorFilePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(editor.document.uri)
+                : editor.document.fileName;
+            if (editorFilePath === filePath) {
+                this.applyHighlightsToEditor(editor);
+            }
         }
     }
 
@@ -214,8 +224,14 @@ export class LineHighlightManager {
 
         // エディタに即座に反映
         const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document.uri.fsPath === filePath) {
-            this.applyHighlightsToEditor(editor);
+        if (editor) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+            const editorFilePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(editor.document.uri)
+                : editor.document.fileName;
+            if (editorFilePath === filePath) {
+                this.applyHighlightsToEditor(editor);
+            }
         }
     }
 
