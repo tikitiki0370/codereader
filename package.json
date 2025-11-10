@@ -362,6 +362,16 @@
     "configuration": {
       "title": "CodeReader",
       "properties": {
+        "codereader.storageLocation": {
+          "type": "string",
+          "enum": ["workspace", "extension"],
+          "default": "workspace",
+          "enumDescriptions": [
+            "Store in workspace root .codereader folder (recommended for version control)",
+            "Store in VS Code extension storage"
+          ],
+          "description": "Choose where to store CodeReader data files"
+        },
         "codereader.codeCopy.format": {
           "type": "string",
           "default": "`{filepath}` {startLine}行目～{endLine}行目\\n```{codetype}\\n{code}\\n```",
