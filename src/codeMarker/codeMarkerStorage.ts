@@ -1,4 +1,5 @@
 import { StateController } from '../stateController';
+import { BaseFolderStorage } from '../modules';
 import { CodeMarker, CodeMarkerDiagnostics, DiagnosticsTypes, DiagnosticsLine, CodeMarkerLineHighlight, CodeMarkerSyntaxHighlight } from './types';
 
 export type CreateCodeMarkerDiagnostics = Omit<CodeMarkerDiagnostics, 'id' | 'createdAt' | 'updatedAt'>;
@@ -8,21 +9,23 @@ export type UpdateCodeMarkerLineHighlight = Partial<Omit<CodeMarkerLineHighlight
 export type CreateCodeMarkerSyntaxHighlight = Omit<CodeMarkerSyntaxHighlight, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateCodeMarkerSyntaxHighlight = Partial<Omit<CodeMarkerSyntaxHighlight, 'id' | 'createdAt'>>;
 
-export class CodeMarkerStorage {
-    private static readonly TOOL_NAME = 'codeMarker';
+export class CodeMarkerStorage extends BaseFolderStorage<CodeMarker> {
+    protected readonly TOOL_NAME = 'codeMarker';
     private static readonly CURRENT_VERSION = '1.0.0';
-    private static readonly DEFAULT_FOLDER = 'Default';
-    
-    constructor(private stateController: StateController) {}
+    protected readonly DEFAULT_FOLDER = 'Default';
+
+    constructor(stateController: StateController) {
+        super(stateController);
+    }
     
     // CodeMarkerデータ全体を取得
     async getCodeMarkerData(): Promise<CodeMarker> {
-        const data = await this.stateController.get(CodeMarkerStorage.TOOL_NAME);
+        const data = await this.stateController.get(this.TOOL_NAME);
         if (!data) {
             // 初期データ構造を作成
             return {
                 CodeMarker: {
-                    [CodeMarkerStorage.DEFAULT_FOLDER]: {}
+                    [this.DEFAULT_FOLDER]: {}
                 },
                 Config: {
                     debug: false
@@ -32,136 +35,14 @@ export class CodeMarkerStorage {
         }
         return data;
     }
-    
-    // エイリアス（LineHighlightManagerで使用）
-    async getData(): Promise<CodeMarker> {
-        return this.getCodeMarkerData();
-    }
-    
+
+
     // CodeMarkerデータ全体を保存
     private async saveCodeMarkerData(data: CodeMarker): Promise<void> {
-        await this.stateController.set(CodeMarkerStorage.TOOL_NAME, data);
-    }
-    
-    // フォルダを作成（親フォルダも自動作成）
-    async createFolder(folderPath: string): Promise<boolean> {
-        const data = await this.getCodeMarkerData();
-
-        if (data.CodeMarker[folderPath]) {
-            return false; // 既に存在する
-        }
-
-        // 親フォルダも作成
-        const parts = folderPath.split('/');
-        for (let i = 1; i <= parts.length; i++) {
-            const subPath = parts.slice(0, i).join('/');
-            if (!data.CodeMarker[subPath]) {
-                data.CodeMarker[subPath] = {};
-            }
-        }
-
-        await this.saveCodeMarkerData(data);
-        return true;
-    }
-    
-    // 全フォルダを取得
-    async getFolders(): Promise<string[]> {
-        const data = await this.getCodeMarkerData();
-        return Object.keys(data.CodeMarker);
+        await this.stateController.set(this.TOOL_NAME, data);
     }
 
-    // サブフォルダを取得（ネストフォルダーサポート）
-    async getSubfolders(parentFolder: string): Promise<string[]> {
-        const folders = await this.getFolders();
-        const prefix = parentFolder + '/';
-        return folders.filter(f =>
-            f.startsWith(prefix) &&
-            f.substring(prefix.length).indexOf('/') === -1
-        );
-    }
-    
-    // フォルダをリネーム（サブフォルダーも一緒にリネーム）
-    async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
-        if (oldPath === CodeMarkerStorage.DEFAULT_FOLDER) {
-            return false; // デフォルトフォルダはリネーム不可
-        }
 
-        const data = await this.getCodeMarkerData();
-
-        if (!data.CodeMarker[oldPath] || data.CodeMarker[newPath]) {
-            return false; // 元のフォルダが存在しないか、新しいフォルダ名が既に存在する
-        }
-
-        // フォルダのデータを移動
-        data.CodeMarker[newPath] = data.CodeMarker[oldPath];
-        delete data.CodeMarker[oldPath];
-
-        // サブフォルダもリネーム
-        const subfolders = Object.keys(data.CodeMarker).filter(f => f.startsWith(oldPath + '/'));
-        for (const subfolder of subfolders) {
-            const newSubPath = subfolder.replace(oldPath, newPath);
-            data.CodeMarker[newSubPath] = data.CodeMarker[subfolder];
-            delete data.CodeMarker[subfolder];
-        }
-
-        // 最後に使用したフォルダの更新
-        if (data.Config.lastedFolder === oldPath) {
-            data.Config.lastedFolder = newPath;
-        }
-
-        await this.saveCodeMarkerData(data);
-        return true;
-    }
-    
-    // フォルダを削除（サブフォルダーも一緒に削除）
-    async deleteFolder(folderPath: string): Promise<boolean> {
-        if (folderPath === CodeMarkerStorage.DEFAULT_FOLDER) {
-            return false; // デフォルトフォルダは削除不可
-        }
-
-        const data = await this.getCodeMarkerData();
-
-        if (!data.CodeMarker[folderPath]) {
-            return false; // フォルダが存在しない
-        }
-
-        // フォルダを削除
-        delete data.CodeMarker[folderPath];
-
-        // サブフォルダも削除
-        const subfolders = Object.keys(data.CodeMarker).filter(f => f.startsWith(folderPath + '/'));
-        for (const subfolder of subfolders) {
-            delete data.CodeMarker[subfolder];
-        }
-
-        // 最後に使用したフォルダの更新
-        if (data.Config.lastedFolder === folderPath) {
-            data.Config.lastedFolder = CodeMarkerStorage.DEFAULT_FOLDER;
-        }
-
-        await this.saveCodeMarkerData(data);
-        return true;
-    }
-    
-    // 有効な最後に使用したフォルダを取得（PostItと同じ実装）
-    async getValidLastedFolder(): Promise<string> {
-        const data = await this.getCodeMarkerData();
-        const lastedFolder = data.Config.lastedFolder;
-        
-        if (!lastedFolder) {
-            return CodeMarkerStorage.DEFAULT_FOLDER;
-        }
-        
-        // フォルダが存在するかチェック
-        if (data.CodeMarker[lastedFolder]) {
-            return lastedFolder;
-        }
-        
-        // 存在しない場合はDefaultに設定を更新して返す
-        await this.updateConfig({ lastedFolder: CodeMarkerStorage.DEFAULT_FOLDER });
-        return CodeMarkerStorage.DEFAULT_FOLDER;
-    }
-    
     // 特定フォルダの特定ファイルのDiagnosticsを取得
     async getDiagnosticsByFolderAndFile(folder: string, filePath: string): Promise<CodeMarkerDiagnostics[]> {
         const data = await this.getCodeMarkerData();
@@ -317,7 +198,7 @@ export class CodeMarkerStorage {
             delete data.CodeMarker[folder][filePath];
             
             // フォルダが空になった場合、フォルダエントリを削除（デフォルトフォルダ以外）
-            if (folder !== CodeMarkerStorage.DEFAULT_FOLDER && 
+            if (folder !== this.DEFAULT_FOLDER && 
                 Object.keys(data.CodeMarker[folder]).length === 0) {
                 delete data.CodeMarker[folder];
             }
@@ -330,12 +211,12 @@ export class CodeMarkerStorage {
     // 全てのDiagnosticsをクリア（PostItと同じくDefaultフォルダのみ残す）
     async clearAllDiagnostics(): Promise<void> {
         const data = await this.getCodeMarkerData();
-        
+
         // PostItと同じく、Defaultフォルダのみ残して他は削除
         data.CodeMarker = {
-            [CodeMarkerStorage.DEFAULT_FOLDER]: {}
+            [this.DEFAULT_FOLDER]: {}
         };
-        
+
         await this.saveCodeMarkerData(data);
     }
     
@@ -413,7 +294,7 @@ export class CodeMarkerStorage {
             delete data.CodeMarker[folder][filePath];
             
             // フォルダが空になった場合、フォルダエントリを削除（デフォルトフォルダ以外）
-            if (folder !== CodeMarkerStorage.DEFAULT_FOLDER && 
+            if (folder !== this.DEFAULT_FOLDER && 
                 Object.keys(data.CodeMarker[folder]).length === 0) {
                 delete data.CodeMarker[folder];
             }
@@ -516,7 +397,7 @@ export class CodeMarkerStorage {
             delete data.CodeMarker[folder][filePath];
             
             // フォルダが空になった場合、フォルダエントリを削除（デフォルトフォルダ以外）
-            if (folder !== CodeMarkerStorage.DEFAULT_FOLDER && 
+            if (folder !== this.DEFAULT_FOLDER && 
                 Object.keys(data.CodeMarker[folder]).length === 0) {
                 delete data.CodeMarker[folder];
             }
@@ -625,7 +506,7 @@ export class CodeMarkerStorage {
             delete data.CodeMarker[sourceFolder][filePath];
 
             // 元のフォルダが空になったら削除（デフォルトフォルダ以外）
-            if (sourceFolder !== CodeMarkerStorage.DEFAULT_FOLDER &&
+            if (sourceFolder !== this.DEFAULT_FOLDER &&
                 Object.keys(data.CodeMarker[sourceFolder]).length === 0) {
                 delete data.CodeMarker[sourceFolder];
             }
@@ -684,7 +565,7 @@ export class CodeMarkerStorage {
             delete data.CodeMarker[sourceFolder][filePath];
 
             // 元のフォルダが空になったら削除（デフォルトフォルダ以外）
-            if (sourceFolder !== CodeMarkerStorage.DEFAULT_FOLDER &&
+            if (sourceFolder !== this.DEFAULT_FOLDER &&
                 Object.keys(data.CodeMarker[sourceFolder]).length === 0) {
                 delete data.CodeMarker[sourceFolder];
             }
@@ -740,7 +621,7 @@ export class CodeMarkerStorage {
             delete data.CodeMarker[sourceFolder][filePath];
 
             // 元のフォルダが空になったら削除（デフォルトフォルダ以外）
-            if (sourceFolder !== CodeMarkerStorage.DEFAULT_FOLDER &&
+            if (sourceFolder !== this.DEFAULT_FOLDER &&
                 Object.keys(data.CodeMarker[sourceFolder]).length === 0) {
                 delete data.CodeMarker[sourceFolder];
             }
@@ -748,5 +629,33 @@ export class CodeMarkerStorage {
 
         await this.saveCodeMarkerData(data);
         return true;
+    }
+
+    // ===========================================
+    // BaseFolderStorage抽象メソッドの実装
+    // ===========================================
+
+    protected async getData(): Promise<CodeMarker> {
+        return await this.getCodeMarkerData();
+    }
+
+    protected async saveData(data: CodeMarker): Promise<void> {
+        await this.saveCodeMarkerData(data);
+    }
+
+    protected getFolderObject(data: CodeMarker): Record<string, any> {
+        return data.CodeMarker;
+    }
+
+    protected setFolderObject(data: CodeMarker, folders: Record<string, any>): void {
+        data.CodeMarker = folders;
+    }
+
+    protected getLastedFolder(data: CodeMarker): string | undefined {
+        return data.Config.lastedFolder;
+    }
+
+    protected setLastedFolder(data: CodeMarker, folder: string): void {
+        data.Config.lastedFolder = folder;
     }
 }

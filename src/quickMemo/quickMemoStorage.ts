@@ -1,4 +1,5 @@
 import { StateController } from '../stateController';
+import { BaseFolderStorage } from '../modules';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -41,12 +42,14 @@ export interface QuickMemoFile{
 //
 // =============================================================================
 
-export class QuickMemoStorage {
-    private static readonly TOOL_NAME = 'quickMemo';
+export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
+    protected readonly TOOL_NAME = 'quickMemo';
     private static readonly CURRENT_VERSION = '1.0.0';
-    private static readonly DEFAULT_FOLDER = 'General';
+    protected readonly DEFAULT_FOLDER = 'General';
 
-    constructor(private stateController: StateController, private context: vscode.ExtensionContext) {}
+    constructor(stateController: StateController, private context: vscode.ExtensionContext) {
+        super(stateController);
+    }
 
     // Get storage URI from StateController
     private getStorageUri(): vscode.Uri | undefined {
@@ -55,7 +58,7 @@ export class QuickMemoStorage {
 
     // 初期化
     async initialize(): Promise<void> {
-        const data = await this.stateController.get(QuickMemoStorage.TOOL_NAME);
+        const data = await this.stateController.get(this.TOOL_NAME);
         if (!data || !data.Version) {
             await this.initializeData();
         }
@@ -77,45 +80,26 @@ export class QuickMemoStorage {
     private async initializeData(): Promise<void> {
         const initialData: QuickMemo = {
             QuickMemos: {
-                [QuickMemoStorage.DEFAULT_FOLDER]: []
+                [this.DEFAULT_FOLDER]: []
             },
             Config: {
                 debug: false,
-                lastedFolder: QuickMemoStorage.DEFAULT_FOLDER
+                lastedFolder: this.DEFAULT_FOLDER
             },
             Version: QuickMemoStorage.CURRENT_VERSION
         };
         
-        await this.stateController.set(QuickMemoStorage.TOOL_NAME, initialData);
+        await this.stateController.set(this.TOOL_NAME, initialData);
     }
     
     // QuickMemoデータ全体を取得
     async getQuickMemoData(): Promise<QuickMemo> {
-        const data = await this.stateController.get(QuickMemoStorage.TOOL_NAME);
+        const data = await this.stateController.get(this.TOOL_NAME);
         if (!data) {
             await this.initializeData();
-            return await this.stateController.get(QuickMemoStorage.TOOL_NAME) as QuickMemo;
+            return await this.stateController.get(this.TOOL_NAME) as QuickMemo;
         }
         return data as QuickMemo;
-    }
-    
-    // フォルダー作成
-    async createFolder(folderName: string): Promise<boolean> {
-        const data = await this.getQuickMemoData();
-        
-        if (data.QuickMemos[folderName]) {
-            return false; // 既に存在
-        }
-        
-        data.QuickMemos[folderName] = [];
-        await this.stateController.set(QuickMemoStorage.TOOL_NAME, data);
-        return true;
-    }
-    
-    // フォルダー一覧取得
-    async getFolders(): Promise<string[]> {
-        const data = await this.getQuickMemoData();
-        return Object.keys(data.QuickMemos).sort();
     }
     
     // 指定フォルダのメモ一覧を取得
@@ -154,7 +138,7 @@ export class QuickMemoStorage {
         }
 
         data.QuickMemos[folderName].push(newMemo);
-        await this.stateController.set(QuickMemoStorage.TOOL_NAME, data);
+        await this.stateController.set(this.TOOL_NAME, data);
 
         return newMemo;
     }
@@ -187,7 +171,7 @@ export class QuickMemoStorage {
             const index = data.QuickMemos[folder].findIndex(m => m.id === memo.id);
             if (index >= 0) {
                 data.QuickMemos[folder][index].updateAt = new Date();
-                await this.stateController.set(QuickMemoStorage.TOOL_NAME, data);
+                await this.stateController.set(this.TOOL_NAME, data);
                 break;
             }
         }
@@ -224,27 +208,7 @@ export class QuickMemoStorage {
     async updateConfig(config: Partial<QuickMemo['Config']>): Promise<void> {
         const data = await this.getQuickMemoData();
         data.Config = { ...data.Config, ...config };
-        await this.stateController.set(QuickMemoStorage.TOOL_NAME, data);
-    }
-    
-    // 有効な最後使用フォルダを取得（存在しない場合はDefaultを返す）
-    async getValidLastedFolder(): Promise<string> {
-        const config = await this.getConfig();
-        const lastedFolder = config.lastedFolder;
-        
-        if (!lastedFolder) {
-            return QuickMemoStorage.DEFAULT_FOLDER;
-        }
-        
-        // フォルダが存在するかチェック
-        const data = await this.getQuickMemoData();
-        if (data.QuickMemos[lastedFolder]) {
-            return lastedFolder;
-        }
-        
-        // 存在しない場合はDefaultに設定を更新して返す
-        await this.updateConfig({ lastedFolder: QuickMemoStorage.DEFAULT_FOLDER });
-        return QuickMemoStorage.DEFAULT_FOLDER;
+        await this.stateController.set(this.TOOL_NAME, data);
     }
     
     // メモをVSCodeで開く
@@ -280,7 +244,7 @@ export class QuickMemoStorage {
             }
 
             // データを保存
-            await this.stateController.set(QuickMemoStorage.TOOL_NAME, data);
+            await this.stateController.set(this.TOOL_NAME, data);
 
             // Markdownファイルを削除
             const storageUri = this.getStorageUri();
@@ -298,6 +262,103 @@ export class QuickMemoStorage {
         } catch (error) {
             console.error('Error deleting QuickMemo:', error);
             throw error;
+        }
+    }
+
+    // メモを別のフォルダに移動（ドラッグ&ドロップ用）
+    async moveMemoToFolder(memoId: string, targetFolder: string): Promise<boolean> {
+        const data = await this.getQuickMemoData();
+        let memoToMove: QuickMemoFile | null = null;
+        let sourceFolder: string | null = null;
+
+        // メモを探す
+        for (const [folder, memos] of Object.entries(data.QuickMemos)) {
+            const memoIndex = memos.findIndex(m => m.id === memoId);
+            if (memoIndex !== -1) {
+                memoToMove = memos[memoIndex];
+                sourceFolder = folder;
+                data.QuickMemos[folder].splice(memoIndex, 1);
+                break;
+            }
+        }
+
+        if (!memoToMove || !sourceFolder) {
+            return false;
+        }
+
+        // ターゲットフォルダが存在しない場合は作成
+        if (!data.QuickMemos[targetFolder]) {
+            data.QuickMemos[targetFolder] = [];
+        }
+
+        // メモを移動
+        data.QuickMemos[targetFolder].push(memoToMove);
+
+        // 元のフォルダが空になったら削除（デフォルトフォルダと親フォルダが空でない場合のみ）
+        if (data.QuickMemos[sourceFolder].length === 0 && sourceFolder !== this.DEFAULT_FOLDER) {
+            // サブフォルダがあるかチェック
+            const hasSubfolders = Object.keys(data.QuickMemos).some(f =>
+                f !== sourceFolder && f.startsWith(sourceFolder + '/')
+            );
+
+            if (!hasSubfolders) {
+                delete data.QuickMemos[sourceFolder];
+            }
+        }
+
+        await this.stateController.set(this.TOOL_NAME, data);
+        return true;
+    }
+
+    // ===========================================
+    // BaseFolderStorage抽象メソッドの実装
+    // ===========================================
+
+    protected async getData(): Promise<QuickMemo> {
+        return await this.getQuickMemoData();
+    }
+
+    protected async saveData(data: QuickMemo): Promise<void> {
+        await this.stateController.set(this.TOOL_NAME, data);
+    }
+
+    protected getFolderObject(data: QuickMemo): Record<string, any> {
+        return data.QuickMemos;
+    }
+
+    protected setFolderObject(data: QuickMemo, folders: Record<string, any>): void {
+        data.QuickMemos = folders;
+    }
+
+    protected getLastedFolder(data: QuickMemo): string | undefined {
+        return data.Config.lastedFolder;
+    }
+
+    protected setLastedFolder(data: QuickMemo, folder: string): void {
+        data.Config.lastedFolder = folder;
+    }
+
+    async isFolderEmpty(folder: string): Promise<boolean> {
+        const data = await this.getData();
+        const memos = data.QuickMemos[folder];
+        return !memos || memos.length === 0;
+    }
+
+    protected async beforeDeleteFolders(foldersToDelete: string[], data: QuickMemo): Promise<void> {
+        // 各フォルダーのメモを削除（.mdファイルも削除）
+        const storageUri = this.getStorageUri();
+        for (const folder of foldersToDelete) {
+            const memos = data.QuickMemos[folder];
+            if (storageUri && memos) {
+                for (const memo of memos) {
+                    const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
+                    try {
+                        await vscode.workspace.fs.delete(mdPath);
+                    } catch (error) {
+                        console.warn('Failed to delete markdown file:', error);
+                    }
+                }
+            }
         }
     }
 }

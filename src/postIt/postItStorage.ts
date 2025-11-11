@@ -1,4 +1,5 @@
 import { StateController } from '../stateController';
+import { BaseFolderStorage } from '../modules';
 
 // =============================================================================
 // PostIt モデル定義
@@ -56,30 +57,30 @@ export type UpdatePostItNote = Partial<Omit<PostItNote, 'id' | 'createdAt'>>;
 //
 // =============================================================================
 
-export class PostItStorage {
-    private static readonly TOOL_NAME = 'postIt';
+export class PostItStorage extends BaseFolderStorage<PostIt> {
+    protected readonly TOOL_NAME = 'postIt';
     private static readonly CURRENT_VERSION = '1.0.0';
-    
-    constructor(private stateController: StateController) {}
-    
-    // デフォルトのフォルダ名
-    static readonly DEFAULT_FOLDER = 'Default';
+    protected readonly DEFAULT_FOLDER = 'Default';
+
+    constructor(stateController: StateController) {
+        super(stateController);
+    }
     
     // PostItデータ全体を取得
     async getPostItData(): Promise<PostIt> {
-        const data = await this.stateController.get(PostItStorage.TOOL_NAME);
+        const data = await this.stateController.get(this.TOOL_NAME);
         if (!data) {
             // 初期データ構造を作成
             const initialData = {
                 PostIts: {
-                    [PostItStorage.DEFAULT_FOLDER]: []  // デフォルトフォルダを作成
+                    [this.DEFAULT_FOLDER]: []  // デフォルトフォルダを作成
                 },
                 Config: {
                     debug: false
                 },
                 Version: PostItStorage.CURRENT_VERSION
             };
-            
+
             // 初期データを保存
             await this.savePostItData(initialData);
             console.log('PostIt initial data created and saved');
@@ -87,10 +88,10 @@ export class PostItStorage {
         }
         return data;
     }
-    
+
     // PostItデータ全体を保存
     private async savePostItData(data: PostIt): Promise<void> {
-        this.stateController.set(PostItStorage.TOOL_NAME, data);
+        this.stateController.set(this.TOOL_NAME, data);
     }
     
     // 特定のフォルダのPostItNoteを取得
@@ -119,76 +120,8 @@ export class PostItStorage {
             notes
         }));
     }
-    
-    // フォルダ一覧を取得
-    async getFolders(): Promise<string[]> {
-        console.log('PostItStorage.getFolders called');
-        try {
-            const data = await this.getPostItData();
-            console.log('PostIt data:', data);
-            const folders = Object.keys(data.PostIts);
-            console.log('PostIt folders from storage:', folders);
-            return folders;
-        } catch (error) {
-            console.error('PostItStorage.getFolders error:', error);
-            throw error;
-        }
-    }
-    
-    // フォルダツリーを取得（階層構造として）
-    async getFolderTree(): Promise<any> {
-        const folders = await this.getFolders();
-        const tree: any = {};
-        
-        for (const folder of folders) {
-            const parts = folder.split('/');
-            let current = tree;
-            
-            for (let i = 0; i < parts.length; i++) {
-                const part = parts[i];
-                if (!current[part]) {
-                    current[part] = {
-                        _path: parts.slice(0, i + 1).join('/'),
-                        _children: {}
-                    };
-                }
-                current = current[part]._children;
-            }
-        }
-        
-        return tree;
-    }
-    
-    // フォルダを作成（親フォルダも自動作成）
-    async createFolder(folderPath: string): Promise<boolean> {
-        const data = await this.getPostItData();
-        if (data.PostIts[folderPath]) {
-            return false; // 既に存在
-        }
-        
-        // 親フォルダも作成
-        const parts = folderPath.split('/');
-        for (let i = 1; i <= parts.length; i++) {
-            const subPath = parts.slice(0, i).join('/');
-            if (!data.PostIts[subPath]) {
-                data.PostIts[subPath] = [];
-            }
-        }
-        
-        await this.savePostItData(data);
-        return true;
-    }
-    
-    // サブフォルダを取得
-    async getSubfolders(parentFolder: string): Promise<string[]> {
-        const folders = await this.getFolders();
-        const prefix = parentFolder + '/';
-        return folders.filter(f => 
-            f.startsWith(prefix) && 
-            f.substring(prefix.length).indexOf('/') === -1
-        );
-    }
-    
+
+
     // PostItNoteを別のフォルダに移動
     async moveNoteToFolder(noteId: string, targetFolder: string): Promise<boolean> {
         const data = await this.getPostItData();
@@ -217,7 +150,7 @@ export class PostItStorage {
         data.PostIts[targetFolder].push(noteToMove);
         
         // 元のフォルダが空になったら削除（デフォルトフォルダと親フォルダが空でない場合のみ）
-        if (data.PostIts[sourceFolder].length === 0 && sourceFolder !== PostItStorage.DEFAULT_FOLDER) {
+        if (data.PostIts[sourceFolder].length === 0 && sourceFolder !== this.DEFAULT_FOLDER) {
             // サブフォルダがあるかチェック
             const hasSubfolders = Object.keys(data.PostIts).some(f => 
                 f !== sourceFolder && f.startsWith(sourceFolder + '/')
@@ -234,7 +167,7 @@ export class PostItStorage {
     
     // PostItNoteを追加（デフォルトフォルダに）
     async addNote(noteData: CreatePostItNote): Promise<PostItNote> {
-        return this.addNoteToFolder(PostItStorage.DEFAULT_FOLDER, noteData);
+        return this.addNoteToFolder(this.DEFAULT_FOLDER, noteData);
     }
     
     // PostItNoteを特定のフォルダに追加
@@ -292,7 +225,7 @@ export class PostItStorage {
             
             if (data.PostIts[folder].length !== initialLength) {
                 // 空になったフォルダは削除（デフォルトフォルダとサブフォルダを持つフォルダ以外）
-                if (data.PostIts[folder].length === 0 && folder !== PostItStorage.DEFAULT_FOLDER) {
+                if (data.PostIts[folder].length === 0 && folder !== this.DEFAULT_FOLDER) {
                     const hasSubfolders = Object.keys(data.PostIts).some(f => 
                         f !== folder && f.startsWith(folder + '/')
                     );
@@ -364,118 +297,51 @@ export class PostItStorage {
         const data = await this.getPostItData();
         return data.Config;
     }
-    
-    // 有効な最後使用フォルダを取得（存在しない場合はDefaultを返す）
-    async getValidLastedFolder(): Promise<string> {
-        const config = await this.getConfig();
-        const lastedFolder = config.lastedFolder;
-        
-        if (!lastedFolder) {
-            return PostItStorage.DEFAULT_FOLDER;
-        }
-        
-        // フォルダが存在するかチェック
-        const data = await this.getPostItData();
-        if (data.PostIts[lastedFolder]) {
-            return lastedFolder;
-        }
-        
-        // 存在しない場合はDefaultに設定を更新して返す
-        await this.updateConfig({ lastedFolder: PostItStorage.DEFAULT_FOLDER });
-        return PostItStorage.DEFAULT_FOLDER;
-    }
-    
+
+
     // PostItsを削除（Defaultフォルダのみ残す、Configは保持）
     async clearAllNotes(): Promise<void> {
         const data = await this.getPostItData();
-        
+
         // PostItsを初期状態にリセット（Defaultフォルダのみ）
         data.PostIts = {
-            [PostItStorage.DEFAULT_FOLDER]: []
+            [this.DEFAULT_FOLDER]: []
         };
-        
+
         await this.savePostItData(data);
     }
 
-    // フォルダをリネーム
-    async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
-        const data = await this.getPostItData();
-        
-        // 新しいフォルダパスが既に存在するかチェック
-        if (data.PostIts[newPath]) {
-            return false; // 既に存在
-        }
-        
-        // デフォルトフォルダはリネーム不可
-        if (oldPath === PostItStorage.DEFAULT_FOLDER) {
-            return false;
-        }
-        
-        // 対象フォルダが存在するかチェック
-        if (!data.PostIts[oldPath]) {
-            return false;
-        }
-        
-        // フォルダをリネーム（PostItを移動）
-        data.PostIts[newPath] = data.PostIts[oldPath];
-        delete data.PostIts[oldPath];
-        
-        // サブフォルダもリネーム
-        const oldPrefix = oldPath + '/';
-        const newPrefix = newPath + '/';
-        const subfolders = Object.keys(data.PostIts).filter(f => f.startsWith(oldPrefix));
-        
-        for (const subfolder of subfolders) {
-            const newSubfolder = subfolder.replace(oldPrefix, newPrefix);
-            data.PostIts[newSubfolder] = data.PostIts[subfolder];
-            delete data.PostIts[subfolder];
-        }
-        
-        // 設定のlastedFolderも更新
-        if (data.Config.lastedFolder === oldPath) {
-            data.Config.lastedFolder = newPath;
-        } else if (data.Config.lastedFolder?.startsWith(oldPrefix)) {
-            data.Config.lastedFolder = data.Config.lastedFolder.replace(oldPrefix, newPrefix);
-        }
-        
-        await this.savePostItData(data);
-        return true;
+    // ===========================================
+    // BaseFolderStorage抽象メソッドの実装
+    // ===========================================
+
+    protected async getData(): Promise<PostIt> {
+        return await this.getPostItData();
     }
 
-    /**
-     * フォルダを削除
-     * デフォルトフォルダは削除不可
-     */
-    async deleteFolder(folderPath: string): Promise<boolean> {
-        if (folderPath === PostItStorage.DEFAULT_FOLDER) {
-            return false; // デフォルトフォルダは削除不可
-        }
-        
-        const data = await this.getPostItData();
-        
-        if (!data.PostIts[folderPath]) {
-            return false; // フォルダが存在しない
-        }
-        
-        // フォルダを削除
-        delete data.PostIts[folderPath];
-        
-        // サブフォルダも削除
-        const prefix = folderPath + '/';
-        const subfolders = Object.keys(data.PostIts).filter(f => f.startsWith(prefix));
-        
-        for (const subfolder of subfolders) {
-            delete data.PostIts[subfolder];
-        }
-        
-        // 最後に使用したフォルダの更新
-        if (data.Config.lastedFolder === folderPath) {
-            data.Config.lastedFolder = PostItStorage.DEFAULT_FOLDER;
-        } else if (data.Config.lastedFolder?.startsWith(prefix)) {
-            data.Config.lastedFolder = PostItStorage.DEFAULT_FOLDER;
-        }
-        
+    protected async saveData(data: PostIt): Promise<void> {
         await this.savePostItData(data);
-        return true;
+    }
+
+    protected getFolderObject(data: PostIt): Record<string, any> {
+        return data.PostIts;
+    }
+
+    protected setFolderObject(data: PostIt, folders: Record<string, any>): void {
+        data.PostIts = folders;
+    }
+
+    protected getLastedFolder(data: PostIt): string | undefined {
+        return data.Config.lastedFolder;
+    }
+
+    protected setLastedFolder(data: PostIt, folder: string): void {
+        data.Config.lastedFolder = folder;
+    }
+
+    async isFolderEmpty(folder: string): Promise<boolean> {
+        const data = await this.getData();
+        const notes = data.PostIts[folder];
+        return !notes || notes.length === 0;
     }
 }

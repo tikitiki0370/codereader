@@ -63,7 +63,7 @@ export class LineHighlightManager {
      * すべてのハイライトを読み込んで適用
      */
     private async loadAndApplyAllHighlights(): Promise<void> {
-        const data = await this.storage.getData();
+        const data = await this.storage.getCodeMarkerData();
         if (!data.CodeMarker) return;
 
         // すべてのファイルのハイライトを収集
@@ -120,7 +120,7 @@ export class LineHighlightManager {
             editor.setDecorations(decorationType, []);
         });
 
-        this.storage.getData().then(data => {
+        this.storage.getCodeMarkerData().then(data => {
             if (!data.CodeMarker) return;
 
             // ファイルのすべてのハイライト情報を収集

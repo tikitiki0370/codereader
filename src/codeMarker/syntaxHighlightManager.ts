@@ -49,7 +49,7 @@ export class SyntaxHighlightManager {
      * すべてのSyntaxHighlightを読み込んで適用
      */
     private async loadAndApplyAllSyntaxHighlights(): Promise<void> {
-        const data = await this.storage.getData();
+        const data = await this.storage.getCodeMarkerData();
         if (!data.CodeMarker) return;
 
         // すべてのファイルのSyntaxHighlightを収集
@@ -98,7 +98,7 @@ export class SyntaxHighlightManager {
         // 既存のデコレーションをクリア
         editor.setDecorations(this.greyoutDecorationType, []);
 
-        this.storage.getData().then(data => {
+        this.storage.getCodeMarkerData().then(data => {
             if (!data.CodeMarker) return;
 
             // ファイルのSyntaxHighlight情報を取得
@@ -301,7 +301,7 @@ export class SyntaxHighlightManager {
      * 指定されたファイルのSyntaxHighlightを取得
      */
     public async getSyntaxHighlight(filePath: string): Promise<CodeMarkerSyntaxHighlight | null> {
-        const data = await this.storage.getData();
+        const data = await this.storage.getCodeMarkerData();
         if (!data.CodeMarker) return null;
 
         for (const [folder, files] of Object.entries(data.CodeMarker)) {

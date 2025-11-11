@@ -24,8 +24,7 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
     }
 
     protected async getSubfolders(parentFolder: string): Promise<string[]> {
-        // QuickMemoはフラット構造なのでサブフォルダなし
-        return [];
+        return await this.storage.getSubfolders(parentFolder);
     }
 
     protected async getItemsByFolder(folderPath: string): Promise<QuickMemoFile[]> {
@@ -74,9 +73,13 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
     }
 
     protected async performDrop(target: QuickMemoTreeItem | undefined, dragData: any[]): Promise<void> {
-        // QuickMemoStorageにmoveMemoToFolderメソッドがないため、
-        // ドラッグ&ドロップは実装しない
-        console.warn('QuickMemo drag and drop not implemented');
+        const targetFolder = target?.folderPath || 'General';
+
+        for (const item of dragData) {
+            if (item.id) {
+                await this.storage.moveMemoToFolder(item.id, targetFolder);
+            }
+        }
     }
 
     protected getDropSuccessMessage(dragData: any[], targetFolder: string): string {
@@ -117,8 +120,11 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
 
     async deleteFolder(folderPath: string): Promise<boolean> {
         try {
-            // QuickMemoStorageにdeleteFolderメソッドがないため、実装しない
-            console.warn('QuickMemo deleteFolder not implemented');
+            const success = await this.storage.deleteFolder(folderPath);
+            if (success) {
+                this.refresh();
+                return true;
+            }
             return false;
         } catch (error) {
             console.error('Failed to delete folder:', error);
@@ -128,8 +134,11 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
 
     async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
         try {
-            // QuickMemoStorageにrenameFolderメソッドがないため、実装しない
-            console.warn('QuickMemo renameFolder not implemented');
+            const success = await this.storage.renameFolder(oldPath, newPath);
+            if (success) {
+                this.refresh();
+                return true;
+            }
             return false;
         } catch (error) {
             console.error('Failed to rename folder:', error);

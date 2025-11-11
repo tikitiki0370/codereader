@@ -135,6 +135,14 @@ export abstract class BaseFolderStorage<TData> {
     }
 
     /**
+     * フォルダー削除前のカスタム処理（サブクラスでオーバーライド可能）
+     * QuickMemoでは.mdファイルの物理削除などに使用
+     */
+    protected async beforeDeleteFolders(foldersToDelete: string[], data: TData): Promise<void> {
+        // デフォルトでは何もしない
+    }
+
+    /**
      * フォルダを削除
      */
     async deleteFolder(folderPath: string): Promise<boolean> {
@@ -149,17 +157,25 @@ export abstract class BaseFolderStorage<TData> {
             return false; // フォルダが存在しない
         }
 
+        // 削除するフォルダのリストを作成（自身とサブフォルダー）
+        const foldersToDelete = [folderPath];
+        const subfolders = Object.keys(folderObject).filter(f => f.startsWith(folderPath + '/'));
+        foldersToDelete.push(...subfolders);
+
+        // カスタム削除処理（QuickMemoのファイル削除など）
+        await this.beforeDeleteFolders(foldersToDelete, data);
+
         // フォルダを削除
         delete folderObject[folderPath];
 
         // サブフォルダも削除
-        const subfolders = Object.keys(folderObject).filter(f => f.startsWith(folderPath + '/'));
         for (const subfolder of subfolders) {
             delete folderObject[subfolder];
         }
 
         // 最後に使用したフォルダの更新
-        if (this.getLastedFolder(data) === folderPath) {
+        if (this.getLastedFolder(data) === folderPath ||
+            subfolders.some(f => f === this.getLastedFolder(data))) {
             this.setLastedFolder(data, this.DEFAULT_FOLDER);
         }
 

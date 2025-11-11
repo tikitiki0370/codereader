@@ -151,9 +151,9 @@ stateController.delete('toolName');
 The extension provides an abstract base class for folder management operations via `BaseFolderStorage`:
 
 - **Purpose**: Provides common folder management logic (create, delete, rename, nested folders)
-- **Usage**: Can be extended by storage classes that need folder organization
-- **Features**: Automatic parent folder creation, subfolder support, folder tree structure
-- **Future**: Designed to be extended by PostItStorage and CodeMarkerStorage for code reuse
+- **Usage**: Extended by PostItStorage, CodeMarkerStorage, and QuickMemoStorage for unified folder management
+- **Features**: Automatic parent folder creation, subfolder support, folder tree structure, hook methods for customization
+- **Pattern**: Template Method pattern with abstract methods for data access
 
 #### BaseFolderStorage Pattern
 ```typescript
@@ -162,13 +162,78 @@ export abstract class BaseFolderStorage<TData> {
     protected abstract readonly TOOL_NAME: string;
     protected abstract readonly DEFAULT_FOLDER: string;
 
-    // Common folder operations
+    // Abstract methods for data access (implemented by subclasses)
+    protected abstract getData(): Promise<TData>;
+    protected abstract saveData(data: TData): Promise<void>;
+    protected abstract getFolderObject(data: TData): Record<string, any>;
+    protected abstract setFolderObject(data: TData, folders: Record<string, any>): void;
+    protected abstract getLastedFolder(data: TData): string | undefined;
+    protected abstract setLastedFolder(data: TData, folder: string): void;
+    abstract isFolderEmpty(folder: string): Promise<boolean>;
+
+    // Hook method for custom cleanup before folder deletion
+    protected async beforeDeleteFolders(foldersToDelete: string[], data: TData): Promise<void> {
+        // Default: no-op, override in subclasses for custom behavior
+    }
+
+    // Common folder operations (implemented in base class)
     async getFolders(): Promise<string[]>;
     async createFolder(folderPath: string): Promise<boolean>;
     async getSubfolders(parentFolder: string): Promise<string[]>;
     async renameFolder(oldPath: string, newPath: string): Promise<boolean>;
     async deleteFolder(folderPath: string): Promise<boolean>;
+    async getValidLastedFolder(): Promise<string>;
     async getFolderTree(): Promise<any>;
+}
+
+// Example implementation
+export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
+    protected readonly TOOL_NAME = 'quickMemo';
+    protected readonly DEFAULT_FOLDER = 'General';
+
+    protected async getData(): Promise<QuickMemo> {
+        return await this.getQuickMemoData();
+    }
+
+    protected async saveData(data: QuickMemo): Promise<void> {
+        await this.stateController.set(this.TOOL_NAME, data);
+    }
+
+    protected getFolderObject(data: QuickMemo): Record<string, any> {
+        return data.QuickMemos;
+    }
+
+    protected setFolderObject(data: QuickMemo, folders: Record<string, any>): void {
+        data.QuickMemos = folders;
+    }
+
+    protected getLastedFolder(data: QuickMemo): string | undefined {
+        return data.Config.lastedFolder;
+    }
+
+    protected setLastedFolder(data: QuickMemo, folder: string): void {
+        data.Config.lastedFolder = folder;
+    }
+
+    async isFolderEmpty(folder: string): Promise<boolean> {
+        const data = await this.getData();
+        const memos = data.QuickMemos[folder];
+        return !memos || memos.length === 0;
+    }
+
+    // Custom hook for .md file cleanup
+    protected async beforeDeleteFolders(foldersToDelete: string[], data: QuickMemo): Promise<void> {
+        const storageUri = this.getStorageUri();
+        for (const folder of foldersToDelete) {
+            const memos = data.QuickMemos[folder];
+            if (storageUri && memos) {
+                for (const memo of memos) {
+                    const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
+                    await vscode.workspace.fs.delete(mdPath);
+                }
+            }
+        }
+    }
 }
 ```
 
@@ -178,6 +243,7 @@ The extension implements a type-safe wrapper for PostIt data via `PostItStorage`
 - **Location**: Data is stored as `postIt.json` in the extension storage directory
 - **Usage**: Create instance with StateController - `new PostItStorage(stateController)`
 - **Features**: Virtual folder organization, nested folder support, type-safe operations
+- **Inheritance**: Extends `BaseFolderStorage<PostIt>` for unified folder management
 
 #### PostItStorage Operations
 ```typescript
@@ -217,25 +283,34 @@ A note-taking system that allows attaching notes to specific code locations:
 ### QuickMemo Module
 A quick note-taking system for temporary thoughts and documentation:
 - **Markdown Storage**: Notes stored as `.md` files in extension storage
-- **Folder Organization**: Categorize memos into folders (General, TODO, Ideas, etc.)
+- **Folder Organization**: Categorize memos into folders with nested subfolder support
+- **Nested Folders**: Support for hierarchical folder structure (e.g., `Projects/2024/Q1`)
+- **Drag & Drop**: Reorganize memos between folders via tree view
 - **File Linking**: Associate memos with workspace files
 - **Quick Access**: Open latest memo, create new memos from context menu
 - **Persistent Storage**: Memos persist across VS Code sessions
+- **External Tool Compatible**: `.md` files can be opened with Obsidian, VSCode, etc.
 
 #### QuickMemoStorage Operations
 ```typescript
 // Get instance
 const quickMemoStorage = new QuickMemoStorage(stateController, context);
 
-// Folder management
-await quickMemoStorage.createFolder('Ideas');
+// Folder management (with nested folder support)
+await quickMemoStorage.createFolder('Projects/2024/Q1');
 await quickMemoStorage.getFolders();
+await quickMemoStorage.getSubfolders('Projects');
+await quickMemoStorage.renameFolder('Projects/2024', 'Projects/2025');
+await quickMemoStorage.deleteFolder('Projects/Archive');
 
 // Memo operations
 await quickMemoStorage.addMemoToFolder('Ideas', 'New Feature', ['src/index.ts']);
 await quickMemoStorage.getLatestMemo();
 await quickMemoStorage.openMemo(memo);
 await quickMemoStorage.deleteMemo(memo);
+
+// Move operations (for drag & drop)
+await quickMemoStorage.moveMemoToFolder(memoId, targetFolder);
 ```
 
 ### CodeCopy Module
@@ -376,6 +451,51 @@ vscode.window.createTreeView('viewId', {
 - **Benefits**:
   - Unified UX across all features
   - Consistent folder organization capabilities
-  - Foundation for future storage refactoring
+  - Foundation for storage inheritance refactoring (completed)
   - ~200 lines of reusable folder management code in BaseFolderStorage
-- **Future Work**: Refactor PostItStorage and CodeMarkerStorage to extend BaseFolderStorage for further code reuse
+
+### QuickMemo UI Unification (Completed)
+- **Issue**: QuickMemo had incomplete folder management features
+  - Missing nested folder support
+  - Missing folder rename/delete functionality
+  - Drag & drop was stubbed but not implemented
+- **Solution**:
+  - Added nested folder support to QuickMemoStorage
+  - Implemented `getSubfolders()`, `renameFolder()`, `deleteFolder()` methods
+  - Implemented `moveMemoToFolder()` for drag & drop
+  - Enabled all folder management features in QuickMemoTreeView
+  - Proper `.md` file cleanup when deleting folders
+- **Benefits**:
+  - Complete feature parity with PostIt and CodeMarker
+  - Unified UX across all three modules
+  - Hierarchical organization for long-term memo management (e.g., `Projects/2024/Q1`)
+  - Maintains external tool compatibility (.md files)
+
+### Storage Inheritance Refactoring (Completed)
+- **Issue**: Code duplication across PostItStorage, CodeMarkerStorage, and QuickMemoStorage
+  - All three classes had identical implementations of folder management methods
+  - Approximately 200-250 lines of duplicate code in each storage class
+  - Increased maintenance burden and risk of inconsistent behavior
+- **Solution**:
+  - Refactored all three storage classes to extend `BaseFolderStorage<TData>`
+  - Implemented template method pattern with abstract methods:
+    - `getData()`: Get tool-specific data structure
+    - `saveData(data)`: Save tool-specific data structure
+    - `getFolderObject(data)`: Extract folder object from data
+    - `setFolderObject(data, folders)`: Set folder object in data
+    - `getLastedFolder(data)`: Get last used folder from config
+    - `setLastedFolder(data, folder)`: Set last used folder in config
+    - `isFolderEmpty(folder)`: Check if folder has any items
+  - Added hook method `beforeDeleteFolders()` for custom cleanup (e.g., QuickMemo's `.md` file deletion)
+  - Removed duplicate methods: `createFolder()`, `getFolders()`, `getSubfolders()`, `renameFolder()`, `deleteFolder()`, `getValidLastedFolder()`, `getFolderTree()`
+- **Benefits**:
+  - Eliminated ~600-750 lines of duplicate code across the three storage classes
+  - Single source of truth for folder management logic
+  - Easier to add new folder features (only update BaseFolderStorage)
+  - Type-safe abstract method contracts enforce consistent implementation
+  - Hook methods allow feature-specific customization without breaking DRY principle
+- **Implementation Details**:
+  - Changed `TOOL_NAME` and `DEFAULT_FOLDER` from `private static readonly` to `protected readonly`
+  - Updated LineHighlightManager and SyntaxHighlightManager to call `getCodeMarkerData()` instead of protected `getData()`
+  - Maintained backward compatibility - all public APIs unchanged
+  - All three storage classes now share identical folder management behavior
