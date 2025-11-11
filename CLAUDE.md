@@ -8,6 +8,8 @@ This is a VS Code extension project called "codereader" written in TypeScript. T
 
 ## Development Commands
 
+use mise
+
 ### Build & Development
 - `pnpm run compile` - Compile TypeScript to JavaScript using webpack
 - `pnpm run watch` - Watch mode for development (auto-recompile on changes)
@@ -145,6 +147,31 @@ stateController.get('toolName');
 stateController.delete('toolName');
 ```
 
+### BaseFolderStorage
+The extension provides an abstract base class for folder management operations via `BaseFolderStorage`:
+
+- **Purpose**: Provides common folder management logic (create, delete, rename, nested folders)
+- **Usage**: Can be extended by storage classes that need folder organization
+- **Features**: Automatic parent folder creation, subfolder support, folder tree structure
+- **Future**: Designed to be extended by PostItStorage and CodeMarkerStorage for code reuse
+
+#### BaseFolderStorage Pattern
+```typescript
+// Abstract base class for folder management
+export abstract class BaseFolderStorage<TData> {
+    protected abstract readonly TOOL_NAME: string;
+    protected abstract readonly DEFAULT_FOLDER: string;
+
+    // Common folder operations
+    async getFolders(): Promise<string[]>;
+    async createFolder(folderPath: string): Promise<boolean>;
+    async getSubfolders(parentFolder: string): Promise<string[]>;
+    async renameFolder(oldPath: string, newPath: string): Promise<boolean>;
+    async deleteFolder(folderPath: string): Promise<boolean>;
+    async getFolderTree(): Promise<any>;
+}
+```
+
 ### PostItStorage
 The extension implements a type-safe wrapper for PostIt data via `PostItStorage` class:
 
@@ -221,11 +248,33 @@ A utility for copying code snippets with context information:
 ### CodeMarker Module
 A diagnostics management system for tracking code issues and notes:
 - **Diagnostics Types**: Hint, Info, Warning, Error levels
-- **Folder Organization**: Categorize diagnostics into folders
+- **Folder Organization**: Categorize diagnostics into folders with nested subfolder support
+- **Nested Folders**: Support for hierarchical folder structure (e.g., `Work/Bugs`, `Work/Features`)
+- **Drag & Drop**: Reorganize diagnostics between folders via tree view
 - **VS Code Integration**: Displays diagnostics in Problems panel
 - **Location Tracking**: Precise line and column position tracking
 - **Context Menu**: Right-click integration for quick diagnostics creation
 - **Code Navigation**: Click on diagnostics items to jump directly to the source location
+
+#### CodeMarkerStorage Operations
+```typescript
+// Get instance
+const codeMarkerStorage = new CodeMarkerStorage(stateController);
+
+// Folder management (with nested folder support)
+await codeMarkerStorage.createFolder('Work/Bugs');
+await codeMarkerStorage.getFolders();
+await codeMarkerStorage.getSubfolders('Work');
+
+// Diagnostics operations
+await codeMarkerStorage.addDiagnosticsToFolder('Work/Bugs', filePath, diagnosticsData);
+await codeMarkerStorage.getDiagnosticsByFolder('Work/Bugs');
+
+// Move operations (for drag & drop)
+await codeMarkerStorage.moveDiagnosticsToFolder(sourceFolder, filePath, id, targetFolder);
+await codeMarkerStorage.moveLineHighlightToFolder(sourceFolder, filePath, id, targetFolder);
+await codeMarkerStorage.moveSyntaxHighlightToFolder(sourceFolder, filePath, targetFolder);
+```
 
 ## Development Guidelines
 
@@ -314,3 +363,19 @@ vscode.window.createTreeView('viewId', {
 - **Issue**: All command logic was previously centralized in `extension.ts` (1200+ lines)
 - **Solution**: Implemented CommandProvider pattern with feature-specific command classes
 - **Result**: `extension.ts` reduced to ~128 lines, improved maintainability and testability
+
+### PostIt and CodeMarker UI Unification (Completed)
+- **Issue**: Inconsistent UI features between PostIt and CodeMarker modules
+  - PostIt had nested folder support and drag & drop functionality
+  - CodeMarker only had flat folder structure and no drag & drop
+- **Solution**:
+  - Created `BaseFolderStorage` abstract class for common folder management logic
+  - Added nested folder support to CodeMarkerStorage (`Work/Bugs` style paths)
+  - Implemented drag & drop move methods for all CodeMarker item types
+  - Enabled drag & drop in CodeMarkerTreeView
+- **Benefits**:
+  - Unified UX across all features
+  - Consistent folder organization capabilities
+  - Foundation for future storage refactoring
+  - ~200 lines of reusable folder management code in BaseFolderStorage
+- **Future Work**: Refactor PostItStorage and CodeMarkerStorage to extend BaseFolderStorage for further code reuse

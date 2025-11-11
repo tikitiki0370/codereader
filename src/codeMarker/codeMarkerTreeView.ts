@@ -14,9 +14,9 @@ type CodeMarkerDataItem =
  * CodeMarker用TreeProvider（統合実装版）
  */
 export class CodeMarkerTreeView extends BaseTreeProvider<CodeMarkerDataItem, CodeMarkerTreeItem> {
-    // ドラッグ&ドロップ設定（無効）
-    readonly dropMimeTypes: string[] = [];
-    readonly dragMimeTypes: string[] = [];
+    // ドラッグ&ドロップ設定
+    readonly dropMimeTypes = ['application/vnd.code.tree.codemarker'];
+    readonly dragMimeTypes = ['application/vnd.code.tree.codemarker'];
 
     constructor(private storage: CodeMarkerStorage) {
         super();
@@ -31,8 +31,7 @@ export class CodeMarkerTreeView extends BaseTreeProvider<CodeMarkerDataItem, Cod
     }
 
     protected async getSubfolders(parentFolder: string): Promise<string[]> {
-        // CodeMarkerはフラット構造なのでサブフォルダなし
-        return [];
+        return await this.storage.getSubfolders(parentFolder);
     }
 
     protected async getItemsByFolder(folderPath: string): Promise<CodeMarkerDataItem[]> {
@@ -139,31 +138,51 @@ export class CodeMarkerTreeView extends BaseTreeProvider<CodeMarkerDataItem, Cod
     }
 
     // ===========================================
-    // ドラッグ&ドロップメソッド（無効）
+    // ドラッグ&ドロップメソッド
     // ===========================================
 
     protected canDrag(item: CodeMarkerTreeItem): boolean {
-        return false; // ドラッグ&ドロップ無効
+        return item.itemType !== 'folder';
     }
 
     protected canDrop(target: CodeMarkerTreeItem | undefined): boolean {
-        return false; // ドラッグ&ドロップ無効
+        return target?.itemType === 'folder' || !target;
     }
 
     protected createDragData(items: CodeMarkerTreeItem[]): any {
-        return []; // ドラッグ&ドロップ無効
+        return items
+            .filter(item => item.itemType !== 'folder')
+            .map(item => ({
+                itemType: item.itemType,
+                folder: item.folder,
+                filePath: item.filePath,
+                id: item.diagnostics?.id || item.highlight?.id,
+                label: item.label
+            }));
     }
 
     protected async performDrop(target: CodeMarkerTreeItem | undefined, dragData: any[]): Promise<void> {
-        // ドラッグ&ドロップ無効
+        const targetFolder = target?.folderPath || 'Default';
+
+        for (const item of dragData) {
+            if (item.itemType === 'diagnostics' && item.id && item.folder && item.filePath) {
+                await this.storage.moveDiagnosticsToFolder(item.folder, item.filePath, item.id, targetFolder);
+            } else if (item.itemType === 'lineHighlight' && item.id && item.folder && item.filePath) {
+                await this.storage.moveLineHighlightToFolder(item.folder, item.filePath, item.id, targetFolder);
+            } else if (item.itemType === 'syntaxHighlight' && item.folder && item.filePath) {
+                await this.storage.moveSyntaxHighlightToFolder(item.folder, item.filePath, targetFolder);
+            }
+        }
     }
 
     protected getDropSuccessMessage(dragData: any[], targetFolder: string): string {
-        return '';
+        return dragData.length === 1
+            ? `Moved "${dragData[0].label}" to "${targetFolder}"`
+            : `Moved ${dragData.length} items to "${targetFolder}"`;
     }
 
     protected getDropErrorMessage(error: any): string {
-        return '';
+        return `Failed to move CodeMarker item: ${error}`;
     }
 
     protected isFolderItem(element: CodeMarkerTreeItem): boolean {

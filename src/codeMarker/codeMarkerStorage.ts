@@ -43,15 +43,23 @@ export class CodeMarkerStorage {
         await this.stateController.set(CodeMarkerStorage.TOOL_NAME, data);
     }
     
-    // フォルダを作成
+    // フォルダを作成（親フォルダも自動作成）
     async createFolder(folderPath: string): Promise<boolean> {
         const data = await this.getCodeMarkerData();
-        
+
         if (data.CodeMarker[folderPath]) {
             return false; // 既に存在する
         }
-        
-        data.CodeMarker[folderPath] = {};
+
+        // 親フォルダも作成
+        const parts = folderPath.split('/');
+        for (let i = 1; i <= parts.length; i++) {
+            const subPath = parts.slice(0, i).join('/');
+            if (!data.CodeMarker[subPath]) {
+                data.CodeMarker[subPath] = {};
+            }
+        }
+
         await this.saveCodeMarkerData(data);
         return true;
     }
@@ -61,52 +69,76 @@ export class CodeMarkerStorage {
         const data = await this.getCodeMarkerData();
         return Object.keys(data.CodeMarker);
     }
+
+    // サブフォルダを取得（ネストフォルダーサポート）
+    async getSubfolders(parentFolder: string): Promise<string[]> {
+        const folders = await this.getFolders();
+        const prefix = parentFolder + '/';
+        return folders.filter(f =>
+            f.startsWith(prefix) &&
+            f.substring(prefix.length).indexOf('/') === -1
+        );
+    }
     
-    // フォルダをリネーム
+    // フォルダをリネーム（サブフォルダーも一緒にリネーム）
     async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
         if (oldPath === CodeMarkerStorage.DEFAULT_FOLDER) {
             return false; // デフォルトフォルダはリネーム不可
         }
-        
+
         const data = await this.getCodeMarkerData();
-        
+
         if (!data.CodeMarker[oldPath] || data.CodeMarker[newPath]) {
             return false; // 元のフォルダが存在しないか、新しいフォルダ名が既に存在する
         }
-        
+
         // フォルダのデータを移動
         data.CodeMarker[newPath] = data.CodeMarker[oldPath];
         delete data.CodeMarker[oldPath];
-        
+
+        // サブフォルダもリネーム
+        const subfolders = Object.keys(data.CodeMarker).filter(f => f.startsWith(oldPath + '/'));
+        for (const subfolder of subfolders) {
+            const newSubPath = subfolder.replace(oldPath, newPath);
+            data.CodeMarker[newSubPath] = data.CodeMarker[subfolder];
+            delete data.CodeMarker[subfolder];
+        }
+
         // 最後に使用したフォルダの更新
         if (data.Config.lastedFolder === oldPath) {
             data.Config.lastedFolder = newPath;
         }
-        
+
         await this.saveCodeMarkerData(data);
         return true;
     }
     
-    // フォルダを削除
+    // フォルダを削除（サブフォルダーも一緒に削除）
     async deleteFolder(folderPath: string): Promise<boolean> {
         if (folderPath === CodeMarkerStorage.DEFAULT_FOLDER) {
             return false; // デフォルトフォルダは削除不可
         }
-        
+
         const data = await this.getCodeMarkerData();
-        
+
         if (!data.CodeMarker[folderPath]) {
             return false; // フォルダが存在しない
         }
-        
+
         // フォルダを削除
         delete data.CodeMarker[folderPath];
-        
+
+        // サブフォルダも削除
+        const subfolders = Object.keys(data.CodeMarker).filter(f => f.startsWith(folderPath + '/'));
+        for (const subfolder of subfolders) {
+            delete data.CodeMarker[subfolder];
+        }
+
         // 最後に使用したフォルダの更新
         if (data.Config.lastedFolder === folderPath) {
             data.Config.lastedFolder = CodeMarkerStorage.DEFAULT_FOLDER;
         }
-        
+
         await this.saveCodeMarkerData(data);
         return true;
     }
@@ -538,5 +570,183 @@ export class CodeMarkerStorage {
         }
         
         return result;
+    }
+
+    // ===========================================
+    // ドラッグ&ドロップ用の移動メソッド
+    // ===========================================
+
+    // Diagnosticsを別のフォルダに移動
+    async moveDiagnosticsToFolder(
+        sourceFolder: string,
+        filePath: string,
+        id: string,
+        targetFolder: string
+    ): Promise<boolean> {
+        const data = await this.getCodeMarkerData();
+
+        // 元のDiagnosticsを取得
+        if (!data.CodeMarker[sourceFolder]?.[filePath]) {
+            return false;
+        }
+
+        const diagnosticsIndex = data.CodeMarker[sourceFolder][filePath].Diagnostics.findIndex(d => d.id === id);
+        if (diagnosticsIndex === -1) {
+            return false;
+        }
+
+        const diagnostics = data.CodeMarker[sourceFolder][filePath].Diagnostics[diagnosticsIndex];
+
+        // ターゲットフォルダが存在しない場合は作成
+        if (!data.CodeMarker[targetFolder]) {
+            data.CodeMarker[targetFolder] = {};
+        }
+
+        // ターゲットフォルダのファイルエントリが無い場合は作成
+        if (!data.CodeMarker[targetFolder][filePath]) {
+            data.CodeMarker[targetFolder][filePath] = {
+                Diagnostics: [],
+                LineHighlight: [],
+                SyntaxHighlight: null
+            };
+        }
+
+        // 元のフォルダから削除
+        data.CodeMarker[sourceFolder][filePath].Diagnostics.splice(diagnosticsIndex, 1);
+
+        // ターゲットフォルダに追加
+        data.CodeMarker[targetFolder][filePath].Diagnostics.push(diagnostics);
+
+        // 元のフォルダのファイルが空になったら削除
+        const sourceFileData = data.CodeMarker[sourceFolder][filePath];
+        if (sourceFileData.Diagnostics.length === 0 &&
+            sourceFileData.LineHighlight.length === 0 &&
+            (!sourceFileData.SyntaxHighlight || !sourceFileData.SyntaxHighlight.Lines || sourceFileData.SyntaxHighlight.Lines.length === 0)) {
+            delete data.CodeMarker[sourceFolder][filePath];
+
+            // 元のフォルダが空になったら削除（デフォルトフォルダ以外）
+            if (sourceFolder !== CodeMarkerStorage.DEFAULT_FOLDER &&
+                Object.keys(data.CodeMarker[sourceFolder]).length === 0) {
+                delete data.CodeMarker[sourceFolder];
+            }
+        }
+
+        await this.saveCodeMarkerData(data);
+        return true;
+    }
+
+    // LineHighlightを別のフォルダに移動
+    async moveLineHighlightToFolder(
+        sourceFolder: string,
+        filePath: string,
+        id: string,
+        targetFolder: string
+    ): Promise<boolean> {
+        const data = await this.getCodeMarkerData();
+
+        // 元のLineHighlightを取得
+        if (!data.CodeMarker[sourceFolder]?.[filePath]) {
+            return false;
+        }
+
+        const highlightIndex = data.CodeMarker[sourceFolder][filePath].LineHighlight.findIndex(h => h.id === id);
+        if (highlightIndex === -1) {
+            return false;
+        }
+
+        const highlight = data.CodeMarker[sourceFolder][filePath].LineHighlight[highlightIndex];
+
+        // ターゲットフォルダが存在しない場合は作成
+        if (!data.CodeMarker[targetFolder]) {
+            data.CodeMarker[targetFolder] = {};
+        }
+
+        // ターゲットフォルダのファイルエントリが無い場合は作成
+        if (!data.CodeMarker[targetFolder][filePath]) {
+            data.CodeMarker[targetFolder][filePath] = {
+                Diagnostics: [],
+                LineHighlight: [],
+                SyntaxHighlight: null
+            };
+        }
+
+        // 元のフォルダから削除
+        data.CodeMarker[sourceFolder][filePath].LineHighlight.splice(highlightIndex, 1);
+
+        // ターゲットフォルダに追加
+        data.CodeMarker[targetFolder][filePath].LineHighlight.push(highlight);
+
+        // 元のフォルダのファイルが空になったら削除
+        const sourceFileData = data.CodeMarker[sourceFolder][filePath];
+        if (sourceFileData.Diagnostics.length === 0 &&
+            sourceFileData.LineHighlight.length === 0 &&
+            (!sourceFileData.SyntaxHighlight || !sourceFileData.SyntaxHighlight.Lines || sourceFileData.SyntaxHighlight.Lines.length === 0)) {
+            delete data.CodeMarker[sourceFolder][filePath];
+
+            // 元のフォルダが空になったら削除（デフォルトフォルダ以外）
+            if (sourceFolder !== CodeMarkerStorage.DEFAULT_FOLDER &&
+                Object.keys(data.CodeMarker[sourceFolder]).length === 0) {
+                delete data.CodeMarker[sourceFolder];
+            }
+        }
+
+        await this.saveCodeMarkerData(data);
+        return true;
+    }
+
+    // SyntaxHighlightを別のフォルダに移動
+    async moveSyntaxHighlightToFolder(
+        sourceFolder: string,
+        filePath: string,
+        targetFolder: string
+    ): Promise<boolean> {
+        const data = await this.getCodeMarkerData();
+
+        // 元のSyntaxHighlightを取得
+        if (!data.CodeMarker[sourceFolder]?.[filePath]?.SyntaxHighlight) {
+            return false;
+        }
+
+        const syntaxHighlight = data.CodeMarker[sourceFolder][filePath].SyntaxHighlight;
+        if (!syntaxHighlight || !syntaxHighlight.Lines || syntaxHighlight.Lines.length === 0) {
+            return false;
+        }
+
+        // ターゲットフォルダが存在しない場合は作成
+        if (!data.CodeMarker[targetFolder]) {
+            data.CodeMarker[targetFolder] = {};
+        }
+
+        // ターゲットフォルダのファイルエントリが無い場合は作成
+        if (!data.CodeMarker[targetFolder][filePath]) {
+            data.CodeMarker[targetFolder][filePath] = {
+                Diagnostics: [],
+                LineHighlight: [],
+                SyntaxHighlight: null
+            };
+        }
+
+        // 元のフォルダから削除
+        data.CodeMarker[sourceFolder][filePath].SyntaxHighlight = null;
+
+        // ターゲットフォルダに追加（上書き）
+        data.CodeMarker[targetFolder][filePath].SyntaxHighlight = syntaxHighlight;
+
+        // 元のフォルダのファイルが空になったら削除
+        const sourceFileData = data.CodeMarker[sourceFolder][filePath];
+        if (sourceFileData.Diagnostics.length === 0 &&
+            sourceFileData.LineHighlight.length === 0 &&
+            (!sourceFileData.SyntaxHighlight || !sourceFileData.SyntaxHighlight.Lines || sourceFileData.SyntaxHighlight.Lines.length === 0)) {
+            delete data.CodeMarker[sourceFolder][filePath];
+
+            // 元のフォルダが空になったら削除（デフォルトフォルダ以外）
+            if (sourceFolder !== CodeMarkerStorage.DEFAULT_FOLDER &&
+                Object.keys(data.CodeMarker[sourceFolder]).length === 0) {
+                delete data.CodeMarker[sourceFolder];
+            }
+        }
+
+        await this.saveCodeMarkerData(data);
+        return true;
     }
 }
