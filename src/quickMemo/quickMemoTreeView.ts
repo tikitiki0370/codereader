@@ -6,13 +6,13 @@ import { QuickMemoTreeItem } from './quickMemoTreeItem';
 /**
  * QuickMemo用TreeProvider（統合実装版）
  */
-export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemoTreeItem> {
+export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemoTreeItem, QuickMemoStorage> {
     // ドラッグ&ドロップ設定
     readonly dropMimeTypes = ['application/vnd.code.tree.quickmemo'];
     readonly dragMimeTypes = ['application/vnd.code.tree.quickmemo'];
 
-    constructor(private storage: QuickMemoStorage) {
-        super();
+    constructor(storage: QuickMemoStorage) {
+        super(storage);
     }
 
     // ===========================================
@@ -98,51 +98,5 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
 
     protected getFolderPath(element: QuickMemoTreeItem): string | undefined {
         return element.folderPath;
-    }
-
-    // ===========================================
-    // フォルダ管理メソッド
-    // ===========================================
-    
-    async createFolder(folderPath: string): Promise<boolean> {
-        try {
-            const success = await this.storage.createFolder(folderPath);
-            if (success) {
-                this.refresh();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Failed to create folder:', error);
-            return false;
-        }
-    }
-
-    async deleteFolder(folderPath: string): Promise<boolean> {
-        try {
-            const success = await this.storage.deleteFolder(folderPath);
-            if (success) {
-                this.refresh();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Failed to delete folder:', error);
-            return false;
-        }
-    }
-
-    async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
-        try {
-            const success = await this.storage.renameFolder(oldPath, newPath);
-            if (success) {
-                this.refresh();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Failed to rename folder:', error);
-            return false;
-        }
     }
 }

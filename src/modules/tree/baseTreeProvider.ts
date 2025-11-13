@@ -1,22 +1,23 @@
 import * as vscode from 'vscode';
+import { BaseFolderStorage } from '../storage/baseFolderStorage';
 
 /**
  * TreeDataProviderの抽象基底クラス
  * 各機能のTreeProviderは、このクラスを継承して必要なメソッドをオーバーライドする
  */
-export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem> 
+export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem, TStorage extends BaseFolderStorage<any> = BaseFolderStorage<any>>
     implements vscode.TreeDataProvider<TTreeItem>, vscode.TreeDragAndDropController<TTreeItem> {
-    
-    private _onDidChangeTreeData: vscode.EventEmitter<TTreeItem | undefined | null | void> = 
+
+    private _onDidChangeTreeData: vscode.EventEmitter<TTreeItem | undefined | null | void> =
         new vscode.EventEmitter<TTreeItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<TTreeItem | undefined | null | void> = 
+    readonly onDidChangeTreeData: vscode.Event<TTreeItem | undefined | null | void> =
         this._onDidChangeTreeData.event;
 
     // ドラッグ&ドロップ設定
     abstract readonly dropMimeTypes: string[];
     abstract readonly dragMimeTypes: string[];
 
-    constructor() {
+    constructor(protected storage: TStorage) {
         // 抽象クラスのコンストラクター
     }
 
@@ -210,4 +211,59 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem>
      * フォルダパスを取得
      */
     protected abstract getFolderPath(element: TTreeItem): string | undefined;
+
+    // ===========================================
+    // 共通フォルダ管理メソッド
+    // ===========================================
+
+    /**
+     * フォルダを作成
+     */
+    async createFolder(folderPath: string): Promise<boolean> {
+        try {
+            const success = await this.storage.createFolder(folderPath);
+            if (success) {
+                this.refresh();
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Failed to create folder:', error);
+            return false;
+        }
+    }
+
+    /**
+     * フォルダを削除
+     */
+    async deleteFolder(folderPath: string): Promise<boolean> {
+        try {
+            const success = await this.storage.deleteFolder(folderPath);
+            if (success) {
+                this.refresh();
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Failed to delete folder:', error);
+            return false;
+        }
+    }
+
+    /**
+     * フォルダをリネーム
+     */
+    async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
+        try {
+            const success = await this.storage.renameFolder(oldPath, newPath);
+            if (success) {
+                this.refresh();
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Failed to rename folder:', error);
+            return false;
+        }
+    }
 }

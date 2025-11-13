@@ -6,13 +6,13 @@ import { PostItTreeItem } from './postItTreeItem';
 /**
  * PostIt用TreeProvider（統合実装版）
  */
-export class PostItTreeView extends BaseTreeProvider<PostItNote, PostItTreeItem> {
+export class PostItTreeView extends BaseTreeProvider<PostItNote, PostItTreeItem, PostItStorage> {
     // ドラッグ&ドロップ設定
     readonly dropMimeTypes = ['application/vnd.code.tree.postit'];
     readonly dragMimeTypes = ['application/vnd.code.tree.postit'];
 
-    constructor(private storage: PostItStorage) {
-        super();
+    constructor(storage: PostItStorage) {
+        super(storage);
     }
 
     // ===========================================
@@ -103,51 +103,5 @@ export class PostItTreeView extends BaseTreeProvider<PostItNote, PostItTreeItem>
 
     protected getFolderPath(element: PostItTreeItem): string | undefined {
         return element.folderPath;
-    }
-
-    // ===========================================
-    // フォルダ管理メソッド
-    // ===========================================
-    
-    async createFolder(folderPath: string): Promise<boolean> {
-        try {
-            const success = await this.storage.createFolder(folderPath);
-            if (success) {
-                this.refresh();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Failed to create folder:', error);
-            return false;
-        }
-    }
-
-    async deleteFolder(folderPath: string): Promise<boolean> {
-        try {
-            const success = await this.storage.deleteFolder(folderPath);
-            if (success) {
-                this.refresh();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Failed to delete folder:', error);
-            return false;
-        }
-    }
-
-    async renameFolder(oldPath: string, newPath: string): Promise<boolean> {
-        try {
-            const success = await this.storage.renameFolder(oldPath, newPath);
-            if (success) {
-                this.refresh();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Failed to rename folder:', error);
-            return false;
-        }
     }
 }
