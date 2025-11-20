@@ -17,9 +17,23 @@ export class CodeCopy {
         }
 
         const document = editor.document;
-        const selectedText = document.getText(selection);
-        const startLine = selection.start.line + 1; // 1-based line numbers
-        const endLine = selection.end.line + 1; // 1-based line numbers
+        
+        // Expand selection to include full lines
+        // Start from the beginning of the start line (column 0)
+        const startLine = selection.start.line;
+        const endLine = selection.end.line;
+        
+        // Get the full line range
+        const startPosition = new vscode.Position(startLine, 0);
+        const endPosition = document.lineAt(endLine).range.end;
+        const fullLineRange = new vscode.Range(startPosition, endPosition);
+        
+        // Get the text of the full lines
+        const selectedText = document.getText(fullLineRange);
+        
+        // Convert to 1-based line numbers for display
+        const displayStartLine = startLine + 1;
+        const displayEndLine = endLine + 1;
         
         // Always use relative path from workspace root
         const filepath = vscode.workspace.asRelativePath(document.uri);
@@ -30,14 +44,14 @@ export class CodeCopy {
         const format = CodeCopyConfigManager.getFormat();
         const formattedText = CodeCopy.formatText(format, {
             filepath,
-            startLine: startLine.toString(),
-            endLine: endLine.toString(),
+            startLine: displayStartLine.toString(),
+            endLine: displayEndLine.toString(),
             code: selectedText,
             codetype
         });
 
         await vscode.env.clipboard.writeText(formattedText);
-        vscode.window.showInformationMessage(`Copied ${endLine - startLine + 1} lines to clipboard`);
+        vscode.window.showInformationMessage(`Copied ${displayEndLine - displayStartLine + 1} lines to clipboard`);
     }
 
     private static formatText(format: string, replacements: Record<string, string>): string {
