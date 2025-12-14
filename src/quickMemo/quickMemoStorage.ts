@@ -165,6 +165,7 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             throw new Error('Storage URI not available');
         }
 
+        await this.ensureQuickMemoDirectory();
         const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
         await vscode.workspace.fs.writeFile(mdPath, Buffer.from(content, 'utf-8'));
 
