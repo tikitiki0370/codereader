@@ -56,22 +56,24 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
         return this.stateController.getStorageUri();
     }
 
-    // 初期化
-    async initialize(): Promise<void> {
-        const data = await this.stateController.get(this.TOOL_NAME);
-        if (!data || !data.Version) {
-            await this.initializeData();
-        }
-
-        // mdファイル用のディレクトリを作成
+    /**
+     * Ensure quickMemo subdirectory exists (lazy initialization)
+     * This is called automatically when creating memo files
+     */
+    private async ensureQuickMemoDirectory(): Promise<void> {
         const storageUri = this.getStorageUri();
         if (storageUri) {
             const mdDir = vscode.Uri.joinPath(storageUri, 'quickMemo');
             try {
-                await vscode.workspace.fs.createDirectory(mdDir);
-                console.log('QuickMemo directory created:', mdDir.fsPath);
-            } catch (e) {
-                // ディレクトリが既に存在する場合は無視
+                await vscode.workspace.fs.stat(mdDir);
+                console.log('QuickMemo directory exists:', mdDir.fsPath);
+            } catch {
+                try {
+                    await vscode.workspace.fs.createDirectory(mdDir);
+                    console.log('QuickMemo directory created:', mdDir.fsPath);
+                } catch (e) {
+                    console.error('Failed to create QuickMemo directory:', e);
+                }
             }
         }
     }
@@ -129,9 +131,10 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             updateAt: now
         };
 
-        // mdファイルを作成
+        // mdファイルを作成（ディレクトリの遅延作成を含む）
         const storageUri = this.getStorageUri();
         if (storageUri) {
+            await this.ensureQuickMemoDirectory();
             const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', fileName);
             const content = `# ${title}\n\nCreated: ${now.toLocaleString()}\n\n`;
             await vscode.workspace.fs.writeFile(mdPath, Buffer.from(content, 'utf-8'));

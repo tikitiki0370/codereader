@@ -29,7 +29,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	
 	try {
 		stateController = StateController.getInstance(context);
-		await stateController.initialize();
 		console.log('StateController initialized successfully');
 		console.log('Storage location:', context.storageUri?.toString());
 		
@@ -38,7 +37,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		
 		// QuickMemoStorageを初期化
 		quickMemoStorage = new QuickMemoStorage(stateController, context);
-		await quickMemoStorage.initialize();
 		console.log('QuickMemoStorage initialized successfully');
 		
 		// CodeMarkerStorageを初期化
