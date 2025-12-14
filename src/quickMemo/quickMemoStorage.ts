@@ -78,9 +78,9 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
         }
     }
     
-    // データの初期化
-    private async initializeData(): Promise<void> {
-        const initialData: QuickMemo = {
+    // 初期データ構造を作成（保存はしない）
+    private createInitialData(): QuickMemo {
+        return {
             QuickMemos: {
                 [this.DEFAULT_FOLDER]: []
             },
@@ -90,16 +90,15 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             },
             Version: QuickMemoStorage.CURRENT_VERSION
         };
-        
-        await this.stateController.set(this.TOOL_NAME, initialData);
     }
     
     // QuickMemoデータ全体を取得
     async getQuickMemoData(): Promise<QuickMemo> {
         const data = await this.stateController.get(this.TOOL_NAME);
         if (!data) {
-            await this.initializeData();
-            return await this.stateController.get(this.TOOL_NAME) as QuickMemo;
+            // データが存在しない場合は初期データを返すが、保存はしない
+            // 保存は実際にメモを作成する時に行われる
+            return this.createInitialData();
         }
         return data as QuickMemo;
     }

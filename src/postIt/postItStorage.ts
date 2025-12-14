@@ -70,8 +70,9 @@ export class PostItStorage extends BaseFolderStorage<PostIt> {
     async getPostItData(): Promise<PostIt> {
         const data = await this.stateController.get(this.TOOL_NAME);
         if (!data) {
-            // 初期データ構造を作成
-            const initialData = {
+            // 初期データ構造を作成（保存はしない）
+            // 保存は実際にPostItを作成する時に行われる
+            return {
                 PostIts: {
                     [this.DEFAULT_FOLDER]: []  // デフォルトフォルダを作成
                 },
@@ -80,11 +81,6 @@ export class PostItStorage extends BaseFolderStorage<PostIt> {
                 },
                 Version: PostItStorage.CURRENT_VERSION
             };
-
-            // 初期データを保存
-            await this.savePostItData(initialData);
-            console.log('PostIt initial data created and saved');
-            return initialData;
         }
         return data;
     }
