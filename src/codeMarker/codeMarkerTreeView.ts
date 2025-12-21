@@ -86,7 +86,7 @@ export class CodeMarkerTreeView extends BaseTreeProvider<CodeMarkerDataItem, Cod
         );
     }
 
-    protected createDataItem(data: CodeMarkerDataItem): CodeMarkerTreeItem {
+    protected createDataItem(data: CodeMarkerDataItem, folderPath?: string): CodeMarkerTreeItem {
         if (data.type === 'diagnostics') {
             return new CodeMarkerTreeItem(
                 data.data.text,

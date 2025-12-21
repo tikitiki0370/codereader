@@ -48,7 +48,7 @@ export class PostItTreeView extends BaseTreeProvider<PostItNote, PostItTreeItem,
         );
     }
 
-    protected createDataItem(data: PostItNote): PostItTreeItem {
+    protected createDataItem(data: PostItNote, folderPath?: string): PostItTreeItem {
         return new PostItTreeItem(
             data.title,
             vscode.TreeItemCollapsibleState.None,
@@ -67,7 +67,7 @@ export class PostItTreeView extends BaseTreeProvider<PostItNote, PostItTreeItem,
     // ===========================================
 
     protected canDrag(item: PostItTreeItem): boolean {
-        return item.itemType === 'note' && !!item.note;
+        return item.itemType === 'data' && !!item.note;
     }
 
     protected canDrop(target: PostItTreeItem | undefined): boolean {

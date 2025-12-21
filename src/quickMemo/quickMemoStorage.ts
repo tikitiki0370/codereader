@@ -29,9 +29,17 @@ export interface QuickMemoFile{
     id: string; // ユニークID
     title: string; // ファイル名として表示するもの
     file: string; // ExtensionContext.storageUriのmdファイルpath
-    links: string[] // 関連付けられたワークスペースのファイルパス
+    Lines: QuickMemoLine[]; // 関連付けられたワークスペースのファイルパス
+    linkedLine?: QuickMemoLine; // メモ作成時に紐付けられた行
     createAt: Date; // 作成日時
     updateAt: Date; // 更新日時
+}
+
+export interface QuickMemoLine {
+    file: string;
+    line: number;
+    endLine?: number;
+    text: string;
 }
 
 // =============================================================================
@@ -110,7 +118,7 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
     }
     
     // メモの追加（フォルダー指定）
-    async addMemoToFolder(folderName: string, title: string, links: string[] = []): Promise<QuickMemoFile> {
+    async addMemoToFolder(folderName: string, title: string, links: string[] = [], linkedLine?: QuickMemoLine): Promise<QuickMemoFile> {
         const data = await this.getQuickMemoData();
 
         if (!data.QuickMemos[folderName]) {
@@ -125,7 +133,8 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             id,
             title,
             file: fileName,
-            links,
+            Lines: [],
+            linkedLine,
             createAt: now,
             updateAt: now
         };
@@ -135,7 +144,22 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
         if (storageUri) {
             await this.ensureQuickMemoDirectory();
             const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', fileName);
-            const content = `# ${title}\n\nCreated: ${now.toLocaleString()}\n\n`;
+            
+            let content = `# ${title}\n\nCreated: ${now.toLocaleString()}\n`;
+            
+            if (linkedLine) {
+                 // VSCode URI format: vscode://file/<absolute_path>:<line>:<column>
+                 // Note: line is 1-based in link, but 0-based in internal data usually. VSCode API works with 1-based commonly in UI links. 
+                 // However, internal storage usually keeps 0-based. Let's assume input line is 0-based, so +1 for display/link.
+                 const linkLine = linkedLine.line + 1;
+                 const fileUri = vscode.Uri.file(linkedLine.file);
+                 const link = `vscode://file/${linkedLine.file}:${linkLine}:1`;
+                 const relativePath = vscode.workspace.asRelativePath(linkedLine.file);
+                 content += `Linked: [${relativePath}:${linkLine}](${link})\n`;
+            }
+
+            content += `\n`;
+
             await vscode.workspace.fs.writeFile(mdPath, Buffer.from(content, 'utf-8'));
         }
 
@@ -149,12 +173,59 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
     async getMemoContent(memo: QuickMemoFile): Promise<string> {
         const storageUri = this.getStorageUri();
         if (!storageUri) {
-            throw new Error('Storage URI not available');
+            // throw new Error('Storage URI not available');
+            return '';
         }
 
         const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
-        const content = await vscode.workspace.fs.readFile(mdPath);
-        return Buffer.from(content).toString('utf-8');
+        try {
+            const content = await vscode.workspace.fs.readFile(mdPath);
+            return Buffer.from(content).toString('utf-8');
+        } catch {
+            return '';
+        }
+    }
+
+    // ファイルパスに紐づくメモを取得
+    async getMemosByLinkedFile(filePath: string): Promise<QuickMemoFile[]> {
+        const data = await this.getQuickMemoData();
+        const results: QuickMemoFile[] = [];
+
+        for (const memos of Object.values(data.QuickMemos)) {
+            for (const memo of memos) {
+                if (memo.linkedLine) {
+                     // Normalize paths for comparison if needed, or stick to simple string check
+                     // Using asRelativePath might be safer if filePath passed is relative/absolute handled consistently
+                     // But assuming strict match or workspace-relative match based on design
+                     
+                     // Design says: "vscode.workspace.asRelativePath(memo.linkedLine.file) === filePath"
+                     // The input `filePath` to this function usually comes from `vscode.workspace.asRelativePath`.
+                     // Let's compare normalized absolute paths or check relative.
+                     // Simpler: Check if memo.linkedLine.file (absolute) matches passed absolute path 
+                     // OR if we pass relative path here.
+                     // The design plan snippet showed `vscode.workspace.asRelativePath(memo.linkedLine.file) === filePath`
+                     // implying `filePath` argument is relative.
+                     // Let's try to handle both or assume standard.
+                     // Let's implement more robust check:
+                     if (memo.linkedLine.file === filePath) {
+                        results.push(memo);
+                     }
+                }
+            }
+        }
+        return results;
+    }
+
+    // IDでメモを検索
+    async getMemoById(id: string): Promise<QuickMemoFile | null> {
+        const data = await this.getQuickMemoData();
+
+        for (const memos of Object.values(data.QuickMemos)) {
+            const memo = memos.find(m => m.id === id);
+            if (memo) return memo;
+        }
+
+        return null;
     }
 
     // メモの内容を更新

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { PostItManager, PostItStorage, PostItCommandProvider, PostItTreeView } from './postIt';
-import { QuickMemoStorage, QuickMemoTreeView, QuickMemoCommandProvider } from './quickMemo';
+import { QuickMemoStorage, QuickMemoTreeView, QuickMemoCommandProvider, QuickMemoDecorationManager } from './quickMemo';
 import { StateController } from './stateController';
 import { CodeCopy } from './codeCopy';
 import { CodeMarkerStorage, DiagnosticsManager, LineHighlightManager, SyntaxHighlightManager, CodeMarkerTreeView, CodeMarkerCommandProvider } from './codeMarker';
@@ -18,6 +18,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	let diagnosticsManager: DiagnosticsManager;
 	let lineHighlightManager: LineHighlightManager;
 	let syntaxHighlightManager: SyntaxHighlightManager;
+	let quickMemoDecorationManager: QuickMemoDecorationManager;
 	
 	// PostIt用のGutter Decorationを作成
 	const postItDecorationType = vscode.window.createTextEditorDecorationType({
@@ -38,6 +39,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		// QuickMemoStorageを初期化
 		quickMemoStorage = new QuickMemoStorage(stateController, context);
 		console.log('QuickMemoStorage initialized successfully');
+
+		// QuickMemoDecorationManagerを初期化
+		quickMemoDecorationManager = new QuickMemoDecorationManager(quickMemoStorage);
 		
 		// CodeMarkerStorageを初期化
 		codeMarkerStorage = new CodeMarkerStorage(stateController);
@@ -64,7 +68,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// QuickMemoTreeViewを作成・登録（新しいBaseTreeProvider使用版）
 	const quickMemoTreeView = new QuickMemoTreeView(quickMemoStorage);
-	vscode.window.createTreeView('codeReaderQuickMemo', {
+	const quickMemoTreeViewInstance = vscode.window.createTreeView('codeReaderQuickMemo', {
 		treeDataProvider: quickMemoTreeView,
 		dragAndDropController: quickMemoTreeView
 	});
@@ -90,6 +94,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		quickMemoTreeView,
 		context
 	);
+	quickMemoCommandProvider.setTreeView(quickMemoTreeViewInstance);
 
 	const codeMarkerCommandProvider = new CodeMarkerCommandProvider(
 		codeMarkerStorage,
@@ -111,6 +116,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	// PostIt gutter decorationとCodeLensの更新
 	async function updatePostItDecorations(editor?: vscode.TextEditor) {
 		await postItCommandProvider.updatePostItDecorations(editor);
+		if (editor) {
+			await quickMemoDecorationManager.updateDecorations(editor);
+		}
 	}
 
 	function updateCodeLens() {
@@ -133,7 +141,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		...quickMemoCommands,
 		...codeMarkerCommands,
 		onDidChangeActiveEditor,
-		postItDecorationType
+		postItDecorationType,
+		quickMemoDecorationManager // Disposable
 	);
 }
 

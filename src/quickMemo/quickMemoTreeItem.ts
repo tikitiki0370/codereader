@@ -1,35 +1,62 @@
 import * as vscode from 'vscode';
 import { QuickMemoFile } from './quickMemoStorage';
+import { BaseTreeItem } from '../modules';
 
-export class QuickMemoTreeItem extends vscode.TreeItem {
+export class QuickMemoTreeItem extends BaseTreeItem<QuickMemoFile> {
     constructor(
         public readonly label: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly itemType: 'folder' | 'memo',
+        itemType: 'folder' | 'memo',
         public readonly folderPath?: string,
-        public readonly memo?: QuickMemoFile,
-        public readonly command?: vscode.Command,
+        memo?: QuickMemoFile,
+        cmd?: vscode.Command,
+        public readonly parentFolderPath?: string // New property for getParent support
     ) {
-        super(label, collapsibleState);
-        
-        if (itemType === 'folder') {
-            this.tooltip = `Folder: ${folderPath}`;
-            this.description = '';
-            this.iconPath = new vscode.ThemeIcon('folder');
-            this.contextValue = 'quickMemoFolder';
-            this.resourceUri = vscode.Uri.parse(`quickmemo-folder:/${folderPath}`);
-        } else if (itemType === 'memo' && memo) {
-            this.tooltip = `${memo.title}\nCreated: ${memo.createAt}\nUpdated: ${memo.updateAt}`;
-            this.description = `${memo.links.length > 0 ? '🔗 ' : ''}${new Date(memo.updateAt).toLocaleDateString()}`;
-            this.iconPath = new vscode.ThemeIcon('note');
-            this.contextValue = 'quickMemoNote';
-            
-            // メモをクリックした時にMarkdownファイルを開くコマンドを設定
-            this.command = {
-                command: 'codereader.openQuickMemo',
-                title: 'Open Memo',
-                arguments: [memo]
-            };
-        }
+        super(
+            label, 
+            collapsibleState, 
+            itemType === 'memo' ? 'data' : 'folder',
+            folderPath,
+            memo,
+            cmd
+        );
+    }
+
+    // dataプロパティへのエイリアス（互換性のため）
+    get memo(): QuickMemoFile | undefined { return this.data; }
+
+    protected getFolderContextValue(): string {
+        return 'quickMemoFolder';
+    }
+
+    protected getUriScheme(): string {
+        return 'quickmemo-folder';
+    }
+
+    protected getDataTooltip(): string {
+        if (!this.data) return '';
+        return `${this.data.title}\nCreated: ${this.data.createAt}\nUpdated: ${this.data.updateAt}`;
+    }
+
+    protected getDataDescription(): string | undefined {
+        if (!this.data) return undefined;
+        return `${this.data.Lines.length > 0 ? '🔗 ' : ''}${new Date(this.data.updateAt).toLocaleDateString()}`;
+    }
+
+    protected getDataIcon(): vscode.ThemeIcon {
+        return new vscode.ThemeIcon('note');
+    }
+
+    protected getDataContextValue(): string {
+        return 'quickMemoNote';
+    }
+
+    protected getDataCommand(): vscode.Command | undefined {
+        if (!this.data) return undefined;
+        return {
+            command: 'codereader.openQuickMemo',
+            title: 'Open Memo',
+            arguments: [this.data]
+        };
     }
 }

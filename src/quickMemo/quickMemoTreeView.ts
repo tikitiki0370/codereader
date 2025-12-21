@@ -40,14 +40,46 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
         );
     }
 
-    protected createDataItem(data: QuickMemoFile): QuickMemoTreeItem {
+    protected createDataItem(data: QuickMemoFile, folderPath?: string): QuickMemoTreeItem {
         return new QuickMemoTreeItem(
             data.title,
             vscode.TreeItemCollapsibleState.None,
             'memo',
             undefined,
-            data
+            data,
+            undefined,
+            folderPath
         );
+    }
+
+    // ===========================================
+    // TreeItemナビゲーション（Reveal用）
+    // ===========================================
+
+    getParent(element: QuickMemoTreeItem): QuickMemoTreeItem | undefined {
+        // メモの場合、親フォルダーを返す
+        if (element.itemType === 'data' && element.parentFolderPath) {
+            return this.createFolderItem(element.parentFolderPath);
+        }
+        
+        // フォルダーの場合、親フォルダーを返す
+        if (element.itemType === 'folder' && element.folderPath) {
+             const parentPath = element.folderPath.substring(0, element.folderPath.lastIndexOf('/'));
+             return parentPath ? this.createFolderItem(parentPath) : undefined;
+        }
+
+        return undefined;
+    }
+
+    async getTreeItemById(id: string): Promise<QuickMemoTreeItem | undefined> {
+        const data = await this.storage.getQuickMemoData();
+        for (const [folderPath, memos] of Object.entries(data.QuickMemos)) {
+            const memo = memos.find(m => m.id === id);
+            if (memo) {
+                return this.createDataItem(memo, folderPath);
+            }
+        }
+        return undefined;
     }
 
     protected getErrorMessage(error: any): string {
@@ -59,7 +91,7 @@ export class QuickMemoTreeView extends BaseTreeProvider<QuickMemoFile, QuickMemo
     // ===========================================
 
     protected canDrag(item: QuickMemoTreeItem): boolean {
-        return item.itemType === 'memo' && !!item.memo;
+        return item.itemType === 'data' && !!item.memo;
     }
 
     protected canDrop(target: QuickMemoTreeItem | undefined): boolean {

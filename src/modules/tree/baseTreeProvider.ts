@@ -64,7 +64,7 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem,
                     // データアイテムを追加
                     const dataItems = await this.getItemsByFolder(folderPath);
                     console.log('Data items:', dataItems.length);
-                    items.push(...dataItems.map(item => this.createDataItem(item)));
+                    items.push(...dataItems.map(item => this.createDataItem(item, folderPath)));
                     
                     console.log('Total folder items:', items.length);
                     return items;
@@ -106,7 +106,7 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem,
     /**
      * データのTreeItemを作成
      */
-    protected abstract createDataItem(data: TData): TTreeItem;
+    protected abstract createDataItem(data: TData, folderPath?: string): TTreeItem;
 
     /**
      * エラー時のメッセージを取得

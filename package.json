@@ -76,6 +76,24 @@
         "title": "Delete Memo"
       },
       {
+        "command": "codereader.createQuickMemoFolder",
+        "title": "Create Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "codereader.createQuickMemoSubFolder",
+        "title": "Create Subfolder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "codereader.renameQuickMemoFolder",
+        "title": "Rename Folder"
+      },
+      {
+        "command": "codereader.deleteQuickMemoFolder",
+        "title": "Delete Folder"
+      },
+      {
         "command": "codereader.addDiagnosticsHint",
         "title": "CodeMarker: Add Hint"
       },
@@ -274,6 +292,21 @@
           "group": "quickmemo@1"
         },
         {
+          "command": "codereader.createQuickMemoSubFolder",
+          "when": "view == codeReaderQuickMemo && viewItem == quickMemoFolder",
+          "group": "folder@1"
+        },
+        {
+          "command": "codereader.renameQuickMemoFolder",
+          "when": "view == codeReaderQuickMemo && viewItem == quickMemoFolder",
+          "group": "folder@2"
+        },
+        {
+          "command": "codereader.deleteQuickMemoFolder",
+          "when": "view == codeReaderQuickMemo && viewItem == quickMemoFolder",
+          "group": "folder@3"
+        },
+        {
           "command": "codereader.createCodeMarkerSubFolder",
           "when": "view == codeReaderCodeMarker && viewItem == codeMarkerFolder",
           "group": "folder@1"
@@ -313,6 +346,11 @@
         {
           "command": "codereader.createCodeMarkerFolder",
           "when": "view == codeReaderCodeMarker",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codereader.createQuickMemoFolder",
+          "when": "view == codeReaderQuickMemo",
           "group": "navigation@2"
         }
       ]
@@ -364,7 +402,10 @@
       "properties": {
         "codereader.storageLocation": {
           "type": "string",
-          "enum": ["workspace", "extension"],
+          "enum": [
+            "workspace",
+            "extension"
+          ],
           "default": "workspace",
           "enumDescriptions": [
             "Store in workspace root .codereader folder (recommended for version control)",
