@@ -49,13 +49,17 @@ export class StateController {
         return this.getStorageUriInternal();
     }
 
-    public async initialize(): Promise<void> {
+    /**
+     * Ensure storage directory exists (lazy initialization)
+     * This is called automatically when saving data
+     */
+    private async ensureStorageDirectory(): Promise<void> {
         const storageUri = this.getStorageUriInternal();
         if (!storageUri) {
             throw new Error('No workspace storage available');
         }
 
-        // ストレージディレクトリの確認・作成
+        // Check if directory exists, create if not
         try {
             await vscode.workspace.fs.stat(storageUri);
             console.log('Storage directory exists:', storageUri.fsPath);
@@ -177,6 +181,9 @@ export class StateController {
         if (data === undefined) return;
 
         try {
+            // Ensure storage directory exists before saving (lazy initialization)
+            await this.ensureStorageDirectory();
+            
             const filePath = vscode.Uri.joinPath(storageUri, `${toolName}.json`);
             const jsonData = JSON.stringify(data, null, 2);
             await vscode.workspace.fs.writeFile(filePath, new TextEncoder().encode(jsonData));
