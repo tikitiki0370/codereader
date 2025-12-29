@@ -3,6 +3,7 @@ import { PostItStorage } from './postItStorage';
 import { PostItTreeView } from './postItTreeView';
 import { PostItCodeLensProvider } from './postItCodeLensProvider';
 import { PostItFoldingProvider } from './postItFoldingProvider';
+import { PostItLineTracker } from './postItLineTracker';
 
 /**
  * PostIt機能の統括クラス
@@ -12,11 +13,13 @@ export class PostItManager {
     private treeProvider: PostItTreeView;
     private codeLensProvider: PostItCodeLensProvider;
     private foldingProvider: PostItFoldingProvider;
-    
+    private lineTracker: PostItLineTracker;
+
     constructor(private storage: PostItStorage) {
         this.treeProvider = new PostItTreeView(storage);
         this.codeLensProvider = new PostItCodeLensProvider(storage);
         this.foldingProvider = new PostItFoldingProvider(storage);
+        this.lineTracker = new PostItLineTracker(storage, () => this.refresh());
     }
 
     /**
@@ -31,12 +34,15 @@ export class PostItManager {
 
         // CodeLensProvider を登録
         const codeLensDisposable = vscode.languages.registerCodeLensProvider('*', this.codeLensProvider);
-        
+
         // FoldingRangeProvider を登録
         const foldingDisposable = vscode.languages.registerFoldingRangeProvider('*', this.foldingProvider);
 
+        // LineTracker を登録（コード変更時のPostIt位置自動追跡）
+        const lineTrackerDisposable = this.lineTracker.register();
+
         // Disposableをコンテキストに追加
-        context.subscriptions.push(codeLensDisposable, foldingDisposable);
+        context.subscriptions.push(codeLensDisposable, foldingDisposable, lineTrackerDisposable);
     }
 
     /**

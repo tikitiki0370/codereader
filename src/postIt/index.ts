@@ -5,3 +5,4 @@ export { PostItStorage, PostItViewType, PostIt, PostItNote, PostItLine, CreatePo
 export { PostItCodeLensProvider } from './postItCodeLensProvider';
 export { PostItFoldingProvider } from './postItFoldingProvider';
 export { PostItCommandProvider } from './postItCommandProvider';
+export { PostItLineTracker } from './postItLineTracker';
