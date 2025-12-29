@@ -264,4 +264,102 @@ export class LineHighlightManager {
     private generateId(): string {
         return `highlight_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     }
+
+    /**
+     * type指定でハイライトを追加（ReadTracker連携用）
+     */
+    public async addHighlightWithType(
+        folderPath: string,
+        filePath: string,
+        color: string,
+        lines: { startLine: number; endLine: number }[],
+        type: string
+    ): Promise<void> {
+        const newHighlight: CodeMarkerLineHighlight = {
+            id: this.generateId(),
+            color: color,
+            Lines: lines,
+            type: type,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        await this.storage.addLineHighlight(folderPath, filePath, newHighlight);
+        this.addHighlightToCache(filePath, newHighlight);
+
+        // エディタに即座に反映
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+            const editorFilePath = workspaceFolder
+                ? vscode.workspace.asRelativePath(editor.document.uri)
+                : editor.document.fileName;
+            if (editorFilePath === filePath) {
+                this.applyHighlightsToEditor(editor);
+            }
+        }
+    }
+
+    /**
+     * type指定でハイライトをまとめて削除（ReadTracker連携用）
+     */
+    public async deleteHighlightsByType(type: string): Promise<number> {
+        const data = await this.storage.getCodeMarkerData();
+        if (!data.CodeMarker) return 0;
+
+        let deletedCount = 0;
+
+        // 全フォルダ・全ファイルを走査
+        for (const [folder, files] of Object.entries(data.CodeMarker)) {
+            for (const [filePath, fileData] of Object.entries(files)) {
+                if (!fileData.LineHighlight) continue;
+
+                // type が一致するハイライトを特定
+                const highlightsToDelete = fileData.LineHighlight.filter(h => h.type === type);
+
+                for (const highlight of highlightsToDelete) {
+                    await this.storage.deleteLineHighlight(folder, filePath, highlight.id);
+
+                    // キャッシュから削除
+                    const fileDecorations = this.fileDecorations.get(filePath);
+                    if (fileDecorations) {
+                        fileDecorations.delete(highlight.id);
+                    }
+
+                    deletedCount++;
+                }
+            }
+        }
+
+        // エディタを更新
+        vscode.window.visibleTextEditors.forEach(editor => {
+            this.applyHighlightsToEditor(editor);
+        });
+
+        return deletedCount;
+    }
+
+    /**
+     * type指定でハイライトを取得
+     */
+    public async getHighlightsByType(type: string): Promise<{ folder: string; filePath: string; highlight: CodeMarkerLineHighlight }[]> {
+        const data = await this.storage.getCodeMarkerData();
+        if (!data.CodeMarker) return [];
+
+        const results: { folder: string; filePath: string; highlight: CodeMarkerLineHighlight }[] = [];
+
+        for (const [folder, files] of Object.entries(data.CodeMarker)) {
+            for (const [filePath, fileData] of Object.entries(files)) {
+                if (!fileData.LineHighlight) continue;
+
+                for (const highlight of fileData.LineHighlight) {
+                    if (highlight.type === type) {
+                        results.push({ folder, filePath, highlight });
+                    }
+                }
+            }
+        }
+
+        return results;
+    }
 }

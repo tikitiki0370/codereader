@@ -170,6 +170,46 @@
       {
         "command": "codereader.toggleSyntaxHighlightDown",
         "title": "CodeMarker: Toggle Line and Move Down"
+      },
+      {
+        "command": "codereader.readTracker.toggleReadMark",
+        "title": "ReadTracker: Toggle Read Mark",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.markSelection",
+        "title": "ReadTracker: Mark Selection as Read",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.unmarkSelection",
+        "title": "ReadTracker: Unmark Selection",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.clearFile",
+        "title": "ReadTracker: Clear Read Marks in File",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.showStats",
+        "title": "ReadTracker: Show Stats",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.clearAll",
+        "title": "ReadTracker: Clear All Records",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.toggleReadMarkUp",
+        "title": "ReadTracker: Toggle Read Mark and Move Up",
+        "category": "CodeReader"
+      },
+      {
+        "command": "codereader.readTracker.toggleReadMarkDown",
+        "title": "ReadTracker: Toggle Read Mark and Move Down",
+        "category": "CodeReader"
       }
     ],
     "menus": {
@@ -258,6 +298,21 @@
           "command": "codereader.addSyntaxHighlight",
           "group": "codemarker@7",
           "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "codereader.readTracker.toggleReadMark",
+          "group": "readtracker@1",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "codereader.readTracker.markSelection",
+          "group": "readtracker@2",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "codereader.readTracker.unmarkSelection",
+          "group": "readtracker@3",
+          "when": "editorHasSelection"
         }
       ],
       "view/item/context": [
@@ -417,6 +472,27 @@
           "type": "string",
           "default": "`{filepath}` {startLine}行目～{endLine}行目\\n```{codetype}\\n{code}\\n```",
           "description": "Format template for copying selected lines. Use {filepath}, {startLine}, {endLine}, {code}, {codetype} as placeholders. Use \\n for line breaks."
+        },
+        "codereader.readTracker.weekStartsOnMonday": {
+          "type": "boolean",
+          "default": true,
+          "description": "Set the week start day to Monday (false for Sunday)"
+        },
+        "codereader.readTracker.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show read tracker statistics in the status bar"
+        },
+        "codereader.readTracker.mergeWindowMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "Time window in minutes for merging adjacent/overlapping read ranges. Set to 0 to disable merging."
+        },
+        "codereader.readTracker.syncToLineHighlight": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically sync read marks to LineHighlight when marking lines as read"
         }
       }
     },
@@ -429,6 +505,16 @@
       {
         "command": "codereader.toggleSyntaxHighlightDown",
         "key": "ctrl+alt+down",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "codereader.readTracker.toggleReadMarkUp",
+        "key": "ctrl+alt+shift+up",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "codereader.readTracker.toggleReadMarkDown",
+        "key": "ctrl+alt+shift+down",
         "when": "editorTextFocus"
       }
     ]
