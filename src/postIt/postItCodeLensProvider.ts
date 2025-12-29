@@ -30,8 +30,8 @@ export class PostItCodeLensProvider implements vscode.CodeLensProvider {
                     const startLine = firstLine.line - 1; // 1ベースから0ベースに変換
                     const endLine = firstLine.endLine - 1; // 1ベースから0ベースに変換
                     
-                    // 折りたたみ可能な範囲（2行以上）の場合のみCodeLensを表示
-                    if (endLine > startLine && endLine < document.lineCount) {
+                    // 有効な範囲（1行以上）の場合にCodeLensを表示
+                    if (endLine >= startLine && endLine < document.lineCount) {
                         const range = new vscode.Range(startLine, 0, startLine, 0);
                         
                         const codeLens = new vscode.CodeLens(range, {
