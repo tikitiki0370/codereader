@@ -242,7 +242,8 @@ export class PostItLineTracker {
             return true;
         } else if (changeEndLine >= postItEndLine0) {
             // PostItの終了部分が削除される
-            // changeStartLine（0ベース）は削除開始行の直前（1ベース）と同じ値
+            // 0ベースのchangeStartLineを1ベースのendLineに代入すると、削除開始の直前行になる
+            // 例: changeStartLine=7(0ベース)=8行目 → endLine=7(1ベース)=7行目(削除されない最後の行)
             line.endLine = Math.max(line.line, changeStartLine);
             return true;
         } else {
