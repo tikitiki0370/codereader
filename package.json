@@ -509,12 +509,12 @@
       },
       {
         "command": "codereader.readTracker.toggleReadMarkUp",
-        "key": "ctrl+shift+up",
+        "key": "ctrl+alt+shift+up",
         "when": "editorTextFocus"
       },
       {
         "command": "codereader.readTracker.toggleReadMarkDown",
-        "key": "ctrl+shift+down",
+        "key": "ctrl+alt+shift+down",
         "when": "editorTextFocus"
       }
     ]
