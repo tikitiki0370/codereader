@@ -1,6 +1,11 @@
 import { TimestampedLineRange } from '../modules/line/types';
 
 /**
+ * ReadTracker highlight type constant (for LineHighlight integration)
+ */
+export const READ_TRACKER_HIGHLIGHT_TYPE = 'readTracker';
+
+/**
  * ReadTracker-specific line range (with timestamp)
  * Extends TimestampedLineRange for future expansion (memo, tags, etc.)
  */

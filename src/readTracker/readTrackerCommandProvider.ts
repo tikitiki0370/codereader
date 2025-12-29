@@ -1,13 +1,8 @@
 import * as vscode from 'vscode';
 import { ReadTrackerManager } from './readTrackerManager';
 import { ReadTrackerStorage } from './readTrackerStorage';
-import { LineHighlightManager, PRESET_COLORS } from '../codeMarker/lineHighlightManager';
-import { CodeMarkerStorage } from '../codeMarker/codeMarkerStorage';
-
-// ReadTracker highlight type constant
-const READ_TRACKER_HIGHLIGHT_TYPE = 'readTracker';
-// Default color for ReadTracker highlights (Green)
-const READ_TRACKER_HIGHLIGHT_COLOR = PRESET_COLORS[1].color;
+import { READ_TRACKER_HIGHLIGHT_TYPE } from './types';
+import { LineHighlightManager } from '../codeMarker/lineHighlightManager';
 
 /**
  * Command provider for ReadTracker
@@ -18,8 +13,7 @@ export class ReadTrackerCommandProvider {
         private manager: ReadTrackerManager,
         private storage: ReadTrackerStorage,
         private context: vscode.ExtensionContext,
-        private lineHighlightManager?: LineHighlightManager,
-        private codeMarkerStorage?: CodeMarkerStorage
+        private lineHighlightManager?: LineHighlightManager
     ) {}
 
     /**
@@ -359,53 +353,23 @@ export class ReadTrackerCommandProvider {
 
     /**
      * Sync ReadTracker data to LineHighlight (fix consistency)
-     * Deletes existing readTracker highlights and recreates from current data
+     * Delegates to manager to avoid code duplication
      */
     private async syncToLineHighlight(): Promise<void> {
-        if (!this.lineHighlightManager || !this.codeMarkerStorage) {
+        const result = await this.manager.syncAllToLineHighlight();
+
+        if (result === null) {
             vscode.window.showWarningMessage('LineHighlight integration not available');
             return;
         }
 
-        // First, clear existing ReadTracker highlights
-        await this.lineHighlightManager.deleteHighlightsByType(READ_TRACKER_HIGHLIGHT_TYPE);
-
-        const records = await this.storage.getAllRecords();
-        if (records.length === 0) {
+        if (result.syncedFiles === 0) {
             vscode.window.showInformationMessage('Sync complete (no records)');
-            return;
-        }
-
-        // Get default folder for LineHighlight
-        const defaultFolder = await this.codeMarkerStorage.getValidLastedFolder();
-
-        let syncedFiles = 0;
-        let syncedLines = 0;
-
-        for (const record of records) {
-            if (record.lines.length === 0) continue;
-
-            // Merge all lines into ranges for this file
-            const lines = record.lines.map(l => ({
-                startLine: l.startLine,
-                endLine: l.endLine
-            }));
-
-            await this.lineHighlightManager.addHighlightWithType(
-                defaultFolder,
-                record.filePath,
-                READ_TRACKER_HIGHLIGHT_COLOR,
-                lines,
-                READ_TRACKER_HIGHLIGHT_TYPE
+        } else {
+            vscode.window.showInformationMessage(
+                `Synced ${result.syncedFiles} files (${result.syncedLines} lines) to LineHighlight`
             );
-
-            syncedFiles++;
-            syncedLines += record.lines.reduce((sum, l) => sum + (l.endLine - l.startLine + 1), 0);
         }
-
-        vscode.window.showInformationMessage(
-            `Synced ${syncedFiles} files (${syncedLines} line ranges) to LineHighlight`
-        );
     }
 
     /**

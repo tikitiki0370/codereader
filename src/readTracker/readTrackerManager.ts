@@ -1,12 +1,10 @@
 import * as vscode from 'vscode';
 import { ReadTrackerStorage } from './readTrackerStorage';
 import { ReadTrackerStatusBar } from './readTrackerStatusBar';
-import { ReadStats } from './types';
+import { ReadStats, READ_TRACKER_HIGHLIGHT_TYPE } from './types';
 import { LineHighlightManager, PRESET_COLORS } from '../codeMarker/lineHighlightManager';
 import { CodeMarkerStorage } from '../codeMarker/codeMarkerStorage';
 
-// ReadTracker highlight type constant
-const READ_TRACKER_HIGHLIGHT_TYPE = 'readTracker';
 // Default color for ReadTracker highlights (Green)
 const READ_TRACKER_HIGHLIGHT_COLOR = PRESET_COLORS[1].color;
 
@@ -147,10 +145,11 @@ export class ReadTrackerManager {
     /**
      * Sync all ReadTracker data to LineHighlight (fix consistency)
      * Deletes existing readTracker highlights and recreates from current data
+     * @returns Sync result with file count and line count, or null if integration unavailable
      */
-    async syncAllToLineHighlight(): Promise<void> {
+    async syncAllToLineHighlight(): Promise<{ syncedFiles: number; syncedLines: number } | null> {
         if (!this.lineHighlightManager || !this.codeMarkerStorage) {
-            return;
+            return null;
         }
 
         // First, clear existing ReadTracker highlights
@@ -158,11 +157,14 @@ export class ReadTrackerManager {
 
         const records = await this.storage.getAllRecords();
         if (records.length === 0) {
-            return;
+            return { syncedFiles: 0, syncedLines: 0 };
         }
 
         // Get default folder for LineHighlight
         const defaultFolder = await this.codeMarkerStorage.getValidLastedFolder();
+
+        let syncedFiles = 0;
+        let syncedLines = 0;
 
         for (const record of records) {
             if (record.lines.length === 0) continue;
@@ -180,6 +182,11 @@ export class ReadTrackerManager {
                 lines,
                 READ_TRACKER_HIGHLIGHT_TYPE
             );
+
+            syncedFiles++;
+            syncedLines += record.lines.reduce((sum, l) => sum + (l.endLine - l.startLine + 1), 0);
         }
+
+        return { syncedFiles, syncedLines };
     }
 }

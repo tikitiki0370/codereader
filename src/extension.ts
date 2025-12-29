@@ -126,8 +126,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		readTrackerManager,
 		readTrackerStorage,
 		context,
-		lineHighlightManager,
-		codeMarkerStorage
+		lineHighlightManager
 	);
 
 	// コマンドを登録
