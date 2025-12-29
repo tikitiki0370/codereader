@@ -43,6 +43,7 @@ export interface CodeMarkerLineHighlight {
     id: string;
     color: string;
     Lines: CodeMarkerLine[];
+    type?: string;  // "manual" | "readTracker" - source of highlight
     createdAt: Date;
     updatedAt: Date;
 }

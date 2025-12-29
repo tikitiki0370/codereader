@@ -4,6 +4,7 @@ import { QuickMemoStorage, QuickMemoTreeView, QuickMemoCommandProvider, QuickMem
 import { StateController } from './stateController';
 import { CodeCopy } from './codeCopy';
 import { CodeMarkerStorage, DiagnosticsManager, LineHighlightManager, SyntaxHighlightManager, CodeMarkerTreeView, CodeMarkerCommandProvider } from './codeMarker';
+import { ReadTrackerStorage, ReadTrackerManager, ReadTrackerStatusBar, ReadTrackerCommandProvider } from './readTracker';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension activate called');
@@ -19,6 +20,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	let lineHighlightManager: LineHighlightManager;
 	let syntaxHighlightManager: SyntaxHighlightManager;
 	let quickMemoDecorationManager: QuickMemoDecorationManager;
+	let readTrackerStorage: ReadTrackerStorage;
+	let readTrackerStatusBar: ReadTrackerStatusBar;
+	let readTrackerManager: ReadTrackerManager;
 	
 	// PostIt用のGutter Decorationを作成
 	const postItDecorationType = vscode.window.createTextEditorDecorationType({
@@ -54,8 +58,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		
 		// SyntaxHighlightManagerを初期化
 		syntaxHighlightManager = new SyntaxHighlightManager(codeMarkerStorage, context);
-		
+
 		console.log('CodeMarker initialized successfully');
+
+		// ReadTrackerを初期化
+		readTrackerStorage = new ReadTrackerStorage(stateController, context);
+		readTrackerStatusBar = new ReadTrackerStatusBar(readTrackerStorage);
+		readTrackerManager = new ReadTrackerManager(readTrackerStorage, readTrackerStatusBar);
+
+		// LineHighlight連携を設定
+		readTrackerManager.setLineHighlightIntegration(lineHighlightManager, codeMarkerStorage);
+
+		// ステータスバーを初期化
+		await readTrackerStatusBar.initialize();
+
+		console.log('ReadTracker initialized successfully');
 	} catch (error) {
 		console.error('Failed to initialize StateController:', error);
 		vscode.window.showErrorMessage('Failed to initialize database: ' + error);
@@ -105,10 +122,19 @@ export async function activate(context: vscode.ExtensionContext) {
 		context
 	);
 
+	const readTrackerCommandProvider = new ReadTrackerCommandProvider(
+		readTrackerManager,
+		readTrackerStorage,
+		context,
+		lineHighlightManager,
+		codeMarkerStorage
+	);
+
 	// コマンドを登録
 	const postItCommands = postItCommandProvider.registerCommands();
 	const quickMemoCommands = quickMemoCommandProvider.registerCommands();
 	const codeMarkerCommands = codeMarkerCommandProvider.registerCommands();
+	const readTrackerCommands = readTrackerCommandProvider.registerCommands();
 
 	// CodeCopyコマンドを登録（既存）
 	CodeCopy.registerCommands(context);
@@ -140,9 +166,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		...postItCommands,
 		...quickMemoCommands,
 		...codeMarkerCommands,
+		...readTrackerCommands,
 		onDidChangeActiveEditor,
 		postItDecorationType,
-		quickMemoDecorationManager // Disposable
+		quickMemoDecorationManager, // Disposable
+		readTrackerStatusBar // Disposable
 	);
 }
 
