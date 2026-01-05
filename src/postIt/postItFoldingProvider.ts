@@ -32,8 +32,8 @@ export class PostItFoldingProvider implements vscode.FoldingRangeProvider {
                     endLine--;
                 }
 
-                // 有効な範囲かチェック（最低2行以上）
-                if (startLine >= 0 && endLine > startLine && endLine < document.lineCount) {
+                // 有効な範囲かチェック（1行以上）
+                if (startLine >= 0 && endLine >= startLine && endLine < document.lineCount) {
                     foldingRanges.push(new vscode.FoldingRange(
                         startLine, 
                         endLine, 

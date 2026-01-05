@@ -777,7 +777,7 @@ export class PostItCommandProvider {
             });
             
             // 有効な範囲かチェック
-            if (startLine < 0 || endLine >= editor.document.lineCount || startLine >= endLine) {
+            if (startLine < 0 || endLine >= editor.document.lineCount || startLine > endLine) {
                 console.error(`Invalid PostIt range:`, {
                     startLine,
                     endLine,
