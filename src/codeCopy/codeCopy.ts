@@ -19,9 +19,14 @@ export class CodeCopy {
         const document = editor.document;
         
         // Expand selection to include full lines
-        // Start from the beginning of the start line (column 0)
         const startLine = selection.start.line;
-        const endLine = selection.end.line;
+        let endLine = selection.end.line;
+
+        // When selecting lines with Shift+Down, the cursor lands on column 0 of the next line.
+        // In that case, the next line is not part of the intended selection.
+        if (selection.end.character === 0 && endLine > startLine) {
+            endLine--;
+        }
         
         // Get the full line range
         const startPosition = new vscode.Position(startLine, 0);
