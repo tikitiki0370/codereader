@@ -5,6 +5,7 @@ export class StateController {
     private extensionStorageUri: vscode.Uri | undefined;
     private dataCache: Map<string, any> = new Map();
     private saveTimeouts: Map<string, NodeJS.Timeout> = new Map();
+    private lastKnownMtime: Map<string, number> = new Map();
 
     private constructor(context: vscode.ExtensionContext) {
         this.extensionStorageUri = context.storageUri;
@@ -87,6 +88,11 @@ export class StateController {
     // ツール固有のデータ取得
     public async get(toolName: string): Promise<any> {
         if (this.dataCache.has(toolName)) {
+            // 外部変更をチェック（保留中の保存がある場合はスキップ）
+            if (await this.hasFileChangedExternally(toolName)) {
+                console.log(`${toolName} data changed on disk, reloading...`);
+                return await this.load(toolName);
+            }
             return this.dataCache.get(toolName);
         }
         
@@ -102,6 +108,7 @@ export class StateController {
     // ツール固有のデータ削除
     public async delete(toolName: string): Promise<void> {
         this.dataCache.delete(toolName);
+        this.lastKnownMtime.delete(toolName);
 
         const storageUri = this.getStorageUriInternal();
         if (!storageUri) return;
@@ -136,6 +143,34 @@ export class StateController {
         this.scheduleSave(toolName);
     }
 
+    /**
+     * JSONファイルが外部から変更されたかをmtimeでチェック
+     * stat()はreadFile()+JSON.parse()よりも軽量なため効率的
+     */
+    private async hasFileChangedExternally(toolName: string): Promise<boolean> {
+        // 保留中の保存がある場合、メモリ上のデータが最新なのでスキップ
+        if (this.saveTimeouts.has(toolName)) {
+            return false;
+        }
+
+        const storageUri = this.getStorageUriInternal();
+        if (!storageUri) {
+            return false;
+        }
+
+        const filePath = vscode.Uri.joinPath(storageUri, `${toolName}.json`);
+        try {
+            const stat = await vscode.workspace.fs.stat(filePath);
+            const lastMtime = this.lastKnownMtime.get(toolName);
+            if (lastMtime !== undefined && stat.mtime !== lastMtime) {
+                return true;
+            }
+            return false;
+        } catch {
+            return false;
+        }
+    }
+
     // ツール固有ファイルからの読み込み
     private async load(toolName: string): Promise<any> {
         const storageUri = this.getStorageUriInternal();
@@ -144,10 +179,12 @@ export class StateController {
         const filePath = vscode.Uri.joinPath(storageUri, `${toolName}.json`);
 
         try {
+            const stat = await vscode.workspace.fs.stat(filePath);
             const fileData = await vscode.workspace.fs.readFile(filePath);
             const jsonData = new TextDecoder().decode(fileData);
             const data = JSON.parse(jsonData);
             this.dataCache.set(toolName, data);
+            this.lastKnownMtime.set(toolName, stat.mtime);
             console.log(`${toolName} data loaded from file:`, filePath.fsPath);
             return data;
         } catch (error) {
@@ -187,6 +224,16 @@ export class StateController {
             const filePath = vscode.Uri.joinPath(storageUri, `${toolName}.json`);
             const jsonData = JSON.stringify(data, null, 2);
             await vscode.workspace.fs.writeFile(filePath, new TextEncoder().encode(jsonData));
+
+            // 保存後にmtimeを記録（自身の書き込みを外部変更と誤検知しないため）
+            try {
+                const stat = await vscode.workspace.fs.stat(filePath);
+                this.lastKnownMtime.set(toolName, stat.mtime);
+            } catch {
+                // stat失敗時はmtimeをクリア（次回のget()でリロードされる）
+                this.lastKnownMtime.delete(toolName);
+            }
+
             console.log(`${toolName} data saved to file:`, filePath.fsPath);
         } catch (error) {
             console.error(`Failed to save ${toolName} data:`, error);
@@ -213,6 +260,7 @@ export class StateController {
     public async close(): Promise<void> {
         await this.forceSaveAll();
         this.dataCache.clear();
+        this.lastKnownMtime.clear();
         this.saveTimeouts.forEach(timeout => clearTimeout(timeout));
         this.saveTimeouts.clear();
     }
