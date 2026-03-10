@@ -5,6 +5,7 @@ export class StateController {
     private extensionStorageUri: vscode.Uri | undefined;
     private dataCache: Map<string, any> = new Map();
     private saveTimeouts: Map<string, NodeJS.Timeout> = new Map();
+    private savingInProgress: Set<string> = new Set();
     private lastKnownMtime: Map<string, number> = new Map();
 
     private constructor(context: vscode.ExtensionContext) {
@@ -148,8 +149,8 @@ export class StateController {
      * stat()はreadFile()+JSON.parse()よりも軽量なため効率的
      */
     private async hasFileChangedExternally(toolName: string): Promise<boolean> {
-        // 保留中の保存がある場合、メモリ上のデータが最新なのでスキップ
-        if (this.saveTimeouts.has(toolName)) {
+        // 保留中の保存または保存中の場合、メモリ上のデータが最新なのでスキップ
+        if (this.saveTimeouts.has(toolName) || this.savingInProgress.has(toolName)) {
             return false;
         }
 
@@ -167,6 +168,12 @@ export class StateController {
             }
             return false;
         } catch {
+            // ファイルが存在しない場合、以前は存在していたなら外部変更とみなす
+            if (this.lastKnownMtime.has(toolName)) {
+                this.lastKnownMtime.delete(toolName);
+                this.dataCache.delete(toolName);
+                return true;
+            }
             return false;
         }
     }
@@ -201,9 +208,14 @@ export class StateController {
             clearTimeout(existingTimeout);
         }
 
-        const timeout = setTimeout(() => {
-            this.save(toolName);
+        const timeout = setTimeout(async () => {
+            this.savingInProgress.add(toolName);
             this.saveTimeouts.delete(toolName);
+            try {
+                await this.save(toolName);
+            } finally {
+                this.savingInProgress.delete(toolName);
+            }
         }, 500); // 500ms後に保存
 
         this.saveTimeouts.set(toolName, timeout);
@@ -230,8 +242,7 @@ export class StateController {
                 const stat = await vscode.workspace.fs.stat(filePath);
                 this.lastKnownMtime.set(toolName, stat.mtime);
             } catch {
-                // stat失敗時はmtimeをクリア（次回のget()でリロードされる）
-                this.lastKnownMtime.delete(toolName);
+                // stat失敗時は前回のmtimeを維持し、次回の変更検知に利用する
             }
 
             console.log(`${toolName} data saved to file:`, filePath.fsPath);
@@ -261,6 +272,7 @@ export class StateController {
         await this.forceSaveAll();
         this.dataCache.clear();
         this.lastKnownMtime.clear();
+        this.savingInProgress.clear();
         this.saveTimeouts.forEach(timeout => clearTimeout(timeout));
         this.saveTimeouts.clear();
     }
