@@ -5,6 +5,7 @@ import { StateController } from './stateController';
 import { CodeCopy } from './codeCopy';
 import { CodeMarkerStorage, DiagnosticsManager, LineHighlightManager, SyntaxHighlightManager, CodeMarkerTreeView, CodeMarkerCommandProvider } from './codeMarker';
 import { ReadTrackerStorage, ReadTrackerManager, ReadTrackerStatusBar, ReadTrackerCommandProvider } from './readTracker';
+import { AgentDocsGenerator } from './modules';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension activate called');
@@ -78,6 +79,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.window.showErrorMessage('Failed to initialize database: ' + error);
 		return;
 	}
+
+	// AIエージェント向けドキュメント生成（非ブロッキング）
+	const extensionVersion = context.extension.packageJSON.version;
+	const docsGenerator = new AgentDocsGenerator(stateController, extensionVersion);
+	docsGenerator.generateIfNeeded().catch(err =>
+		console.log('Agent docs generation skipped:', err)
+	);
 
 	// PostIt統括マネージャーを作成・登録
 	const postItManager = new PostItManager(postItStorage);
