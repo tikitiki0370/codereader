@@ -258,7 +258,12 @@ export class StateController {
             clearTimeout(timeout);
             this.saveTimeouts.delete(toolName);
         }
-        await this.save(toolName);
+        this.savingInProgress.add(toolName);
+        try {
+            await this.save(toolName);
+        } finally {
+            this.savingInProgress.delete(toolName);
+        }
     }
 
     // 全ツールの即座保存
