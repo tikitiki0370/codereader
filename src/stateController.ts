@@ -52,6 +52,17 @@ export class StateController {
     }
 
     /**
+     * Check if current storage mode is workspace (not extension storage)
+     * Used by AgentDocsGenerator to determine if docs should be generated
+     */
+    public isWorkspaceStorage(): boolean {
+        const config = vscode.workspace.getConfiguration('codereader');
+        const storageLocation = config.get<string>('storageLocation', 'workspace');
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        return storageLocation === 'workspace' && !!workspaceFolders && workspaceFolders.length > 0;
+    }
+
+    /**
      * Ensure storage directory exists (lazy initialization)
      * This is called automatically when saving data
      */
