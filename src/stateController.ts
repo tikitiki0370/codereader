@@ -1,15 +1,144 @@
 import * as vscode from 'vscode';
 
+/**
+ * After a self-write completes, suppress watcher events for this long to absorb
+ * the filesystem echo. Covers the gap between `savingInProgress` being cleared
+ * and the watcher event being delivered, and the mtime-resolution edge case
+ * where two writes within the same second share an mtime.
+ */
+const SELF_WRITE_SUPPRESS_MS = 1500;
+
+/**
+ * Coalesce bursts of watcher events (atomic save's delete+create, rapid edits)
+ * so subscribers see at most one onExternalChange per toolName per this window.
+ */
+const EXTERNAL_CHANGE_DEBOUNCE_MS = 100;
+
 export class StateController {
     private static instance: StateController | null = null;
     private extensionStorageUri: vscode.Uri | undefined;
     private dataCache: Map<string, any> = new Map();
     private saveTimeouts: Map<string, NodeJS.Timeout> = new Map();
     private savingInProgress: Set<string> = new Set();
+    private deletingInProgress: Set<string> = new Set();
     private lastKnownMtime: Map<string, number> = new Map();
+    /** Timestamp (ms) of the last self-write per toolName, for SELF_WRITE_SUPPRESS_MS. */
+    private recentSelfWriteAt: Map<string, number> = new Map();
+
+    private fileWatcher: vscode.FileSystemWatcher | undefined;
+    private watcherStoragePath: string | undefined;
+    private externalChangeDebounce: Map<string, NodeJS.Timeout> = new Map();
+    private subscriptions: vscode.Disposable[] = [];
+    private _onExternalChange = new vscode.EventEmitter<string>();
+    /**
+     * Fires with the toolName (e.g., "postIt") whenever the corresponding
+     * `<storage>/<toolName>.json` is modified, created, or deleted by something
+     * other than this extension. Cache + mtime are invalidated before the event fires,
+     * so subscribers can call get(toolName) to obtain fresh data.
+     */
+    public readonly onExternalChange = this._onExternalChange.event;
+
+    private _onStorageDirectoryCreated = new vscode.EventEmitter<vscode.Uri>();
+    /**
+     * Fires once when the storage directory (e.g., `.codereader/`) is created
+     * by this extension's lazy init. Lets consumers like AgentDocsGenerator
+     * run setup that depends on the directory existing.
+     */
+    public readonly onStorageDirectoryCreated = this._onStorageDirectoryCreated.event;
 
     private constructor(context: vscode.ExtensionContext) {
         this.extensionStorageUri = context.storageUri;
+        this.ensureFileWatcher();
+
+        // Recreate the watcher when storage location or workspace folders change
+        this.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration(e => {
+                if (e.affectsConfiguration('codereader.storageLocation')) {
+                    this.ensureFileWatcher();
+                }
+            }),
+            vscode.workspace.onDidChangeWorkspaceFolders(() => {
+                this.ensureFileWatcher();
+            })
+        );
+    }
+
+    /** True if the toolName is in any phase of an in-flight self-write. */
+    private isSelfWriteInFlight(toolName: string): boolean {
+        if (this.saveTimeouts.has(toolName)) return true;
+        if (this.savingInProgress.has(toolName)) return true;
+        if (this.deletingInProgress.has(toolName)) return true;
+        const recentAt = this.recentSelfWriteAt.get(toolName);
+        if (recentAt !== undefined && Date.now() - recentAt < SELF_WRITE_SUPPRESS_MS) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Create (or recreate) the FileSystemWatcher for the current storage URI.
+     * Detects external edits to `<storage>/*.json` and fires onExternalChange.
+     */
+    private ensureFileWatcher(): void {
+        const storageUri = this.getStorageUriInternal();
+        const newPath = storageUri?.fsPath;
+        if (newPath === this.watcherStoragePath && this.fileWatcher) {
+            return; // already watching the right place
+        }
+
+        this.fileWatcher?.dispose();
+        this.fileWatcher = undefined;
+        this.watcherStoragePath = undefined;
+
+        if (!storageUri) {
+            return;
+        }
+
+        const pattern = new vscode.RelativePattern(storageUri, '*.json');
+        this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+        this.watcherStoragePath = newPath;
+
+        const handleEvent = (uri: vscode.Uri, kind: 'change' | 'create' | 'delete') => {
+            const toolName = this.toolNameFromUri(uri);
+            if (!toolName) return;
+            if (this.isSelfWriteInFlight(toolName)) return;
+
+            const existing = this.externalChangeDebounce.get(toolName);
+            if (existing) clearTimeout(existing);
+
+            const timer = setTimeout(async () => {
+                this.externalChangeDebounce.delete(toolName);
+
+                // Re-check at firing time: a save() may have completed during the debounce window.
+                if (this.isSelfWriteInFlight(toolName)) return;
+
+                if (kind !== 'delete') {
+                    // Final mtime check defends against the filesystem echoing back a write
+                    // that completed just before debounce fired.
+                    try {
+                        const stat = await vscode.workspace.fs.stat(uri);
+                        if (this.lastKnownMtime.get(toolName) === stat.mtime) return;
+                    } catch {
+                        // file vanished mid-debounce — fall through, treat as external delete
+                    }
+                }
+
+                this.dataCache.delete(toolName);
+                this.lastKnownMtime.delete(toolName);
+                this._onExternalChange.fire(toolName);
+            }, EXTERNAL_CHANGE_DEBOUNCE_MS);
+
+            this.externalChangeDebounce.set(toolName, timer);
+        };
+
+        this.fileWatcher.onDidChange(uri => handleEvent(uri, 'change'));
+        this.fileWatcher.onDidCreate(uri => handleEvent(uri, 'create'));
+        this.fileWatcher.onDidDelete(uri => handleEvent(uri, 'delete'));
+    }
+
+    private toolNameFromUri(uri: vscode.Uri): string | undefined {
+        const match = uri.path.match(/\/([^/]+)\.json$/);
+        return match ? match[1] : undefined;
     }
 
     public static getInstance(context?: vscode.ExtensionContext): StateController {
@@ -75,11 +204,10 @@ export class StateController {
         // Check if directory exists, create if not
         try {
             await vscode.workspace.fs.stat(storageUri);
-            console.log('Storage directory exists:', storageUri.fsPath);
         } catch {
             try {
                 await vscode.workspace.fs.createDirectory(storageUri);
-                console.log('Storage directory created:', storageUri.fsPath);
+                this._onStorageDirectoryCreated.fire(storageUri);
             } catch (error) {
                 console.error('Failed to create storage directory:', error);
                 // If workspace storage fails, try extension storage as fallback
@@ -125,12 +253,16 @@ export class StateController {
         const storageUri = this.getStorageUriInternal();
         if (!storageUri) return;
 
+        this.deletingInProgress.add(toolName);
         try {
             const filePath = vscode.Uri.joinPath(storageUri, `${toolName}.json`);
             await vscode.workspace.fs.delete(filePath);
-            console.log(`${toolName}.json deleted`);
+            // Mark the deletion timestamp so the watcher's delete echo is suppressed
+            this.recentSelfWriteAt.set(toolName, Date.now());
         } catch (error) {
             console.error(`Failed to delete ${toolName}.json:`, error);
+        } finally {
+            this.deletingInProgress.delete(toolName);
         }
     }
 
@@ -256,7 +388,9 @@ export class StateController {
                 // stat失敗時は前回のmtimeを維持し、次回の変更検知に利用する
             }
 
-            console.log(`${toolName} data saved to file:`, filePath.fsPath);
+            // Stamp self-write time so any delayed watcher echo within the
+            // suppress window is ignored even after savingInProgress is cleared.
+            this.recentSelfWriteAt.set(toolName, Date.now());
         } catch (error) {
             console.error(`Failed to save ${toolName} data:`, error);
         }
@@ -289,8 +423,19 @@ export class StateController {
         this.dataCache.clear();
         this.lastKnownMtime.clear();
         this.savingInProgress.clear();
+        this.deletingInProgress.clear();
+        this.recentSelfWriteAt.clear();
         this.saveTimeouts.forEach(timeout => clearTimeout(timeout));
         this.saveTimeouts.clear();
+        this.externalChangeDebounce.forEach(timeout => clearTimeout(timeout));
+        this.externalChangeDebounce.clear();
+        this.fileWatcher?.dispose();
+        this.fileWatcher = undefined;
+        this.watcherStoragePath = undefined;
+        this.subscriptions.forEach(d => d.dispose());
+        this.subscriptions = [];
+        this._onExternalChange.dispose();
+        this._onStorageDirectoryCreated.dispose();
     }
 
     public static async dispose(): Promise<void> {

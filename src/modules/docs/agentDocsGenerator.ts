@@ -8,7 +8,6 @@ import { StateController } from '../../stateController';
  * Generation conditions:
  * - Only in workspace storage mode (not extension storage)
  * - Only when .codereader/ directory already exists
- * - Skipped if existing file version matches current extension version
  */
 export class AgentDocsGenerator {
     constructor(
@@ -17,7 +16,7 @@ export class AgentDocsGenerator {
     ) {}
 
     /**
-     * Generate documentation files if needed.
+     * Generate documentation files whenever .codereader/ exists.
      * This is non-blocking and safe to call during activation.
      */
     async generateIfNeeded(): Promise<void> {
@@ -40,46 +39,32 @@ export class AgentDocsGenerator {
             return;
         }
 
-        // Check if regeneration is needed (version mismatch or file missing)
-        const claudeMdUri = vscode.Uri.joinPath(storageUri, 'CLAUDE.md');
-        if (!await this.needsRegeneration(claudeMdUri)) {
-            console.log('Agent docs: skipped (version matches)');
-            return;
-        }
-
-        // Generate and write documentation
+        // Regenerate whenever content has actually changed. Comparing content
+        // (instead of version) means doc edits land without a version bump,
+        // and avoids re-writing identical bytes — which would otherwise prompt
+        // VS Code's "file changed on disk" dialog if the user has the file open.
         const content = this.generateContent();
+        const claudeMdUri = vscode.Uri.joinPath(storageUri, 'CLAUDE.md');
         const agentsMdUri = vscode.Uri.joinPath(storageUri, 'AGENTS.md');
 
         await Promise.all([
-            this.writeFile(claudeMdUri, content),
-            this.writeFile(agentsMdUri, content),
+            this.writeIfChanged(claudeMdUri, content),
+            this.writeIfChanged(agentsMdUri, content),
         ]);
-
-        console.log('Agent docs: generated CLAUDE.md and AGENTS.md (version: ' + this.version + ')');
     }
 
     /**
-     * Check if the file needs regeneration by comparing version stamps.
+     * Write content only if the file is missing or its current content differs.
      */
-    private async needsRegeneration(fileUri: vscode.Uri): Promise<boolean> {
+    private async writeIfChanged(uri: vscode.Uri, content: string): Promise<void> {
         try {
-            const fileData = await vscode.workspace.fs.readFile(fileUri);
-            const content = new TextDecoder().decode(fileData);
-            const match = content.match(/<!-- codereader-version: (.+?) -->/);
-            if (match && match[1] === this.version) {
-                return false;
+            const existing = await vscode.workspace.fs.readFile(uri);
+            if (new TextDecoder().decode(existing) === content) {
+                return; // nothing to do
             }
         } catch {
-            // File doesn't exist - needs generation
+            // file doesn't exist — fall through to write
         }
-        return true;
-    }
-
-    /**
-     * Write content to a file using VS Code filesystem API.
-     */
-    private async writeFile(uri: vscode.Uri, content: string): Promise<void> {
         await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
     }
 
@@ -95,7 +80,7 @@ export class AgentDocsGenerator {
 This directory contains data files for the CodeReader VS Code extension.
 The extension provides code reading assistance tools: PostIt notes, QuickMemo, CodeMarker, and ReadTracker.
 
-> **Important**: The extension monitors file changes via mtime. If you edit JSON files while VS Code is running, the extension will automatically reload the data on next access.
+> **Important**: The extension watches these JSON files with a FileSystemWatcher. Direct edits to \`*.json\` while VS Code is running are detected immediately, and all relevant UI (tree views, CodeLens, diagnostics, decorations, status bar) is refreshed automatically — no reload required.
 
 ---
 

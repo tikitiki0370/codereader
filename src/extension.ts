@@ -81,11 +81,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	// AIエージェント向けドキュメント生成（非ブロッキング）
+	// activate 時には .codereader/ が未作成のことが多いので、初回 save 時の
+	// ディレクトリ作成イベントでも再試行する
 	const extensionVersion = context.extension.packageJSON.version;
 	const docsGenerator = new AgentDocsGenerator(stateController, extensionVersion);
 	docsGenerator.generateIfNeeded().catch(err =>
 		console.log('Agent docs generation skipped:', err)
 	);
+	const docsOnDirCreated = stateController.onStorageDirectoryCreated(() => {
+		docsGenerator.generateIfNeeded().catch(err =>
+			console.log('Agent docs generation skipped:', err)
+		);
+	});
 
 	// PostIt統括マネージャーを作成・登録
 	const postItManager = new PostItManager(postItStorage);
@@ -163,7 +170,43 @@ export async function activate(context: vscode.ExtensionContext) {
 		updatePostItDecorations(editor);
 		updateCodeLens();
 	});
-	
+
+	// 外部編集 (AI agentやエディタによる .codereader/*.json の直接編集) を検知して
+	// 関連する全UIを再描画する
+	const externalChangeDisposable = stateController.onExternalChange(async (toolName) => {
+		try {
+			if (toolName === 'postIt') {
+				postItManager.refresh();
+				await updatePostItDecorations(vscode.window.activeTextEditor);
+			} else if (toolName === 'quickMemo') {
+				quickMemoTreeView.refresh();
+				for (const editor of vscode.window.visibleTextEditors) {
+					await quickMemoDecorationManager.updateDecorations(editor);
+				}
+			} else if (toolName === 'codeMarker') {
+				codeMarkerTreeView.refresh();
+				await diagnosticsManager.loadAllDiagnostics();
+				await lineHighlightManager.refresh();
+				await syntaxHighlightManager.refresh();
+			} else if (toolName === 'readTracker') {
+				await readTrackerStatusBar.update();
+				const syncEnabled = vscode.workspace
+					.getConfiguration('codereader.readTracker')
+					.get<boolean>('syncToLineHighlight', false);
+				if (syncEnabled) {
+					// syncAllToLineHighlight writes to codeMarker.json. The watcher echo is
+					// suppressed by StateController's self-write window, so the resulting
+					// codeMarker branch above does not fire. If a future refresh path
+					// starts writing back, audit this for a potential feedback loop.
+					await readTrackerManager.syncAllToLineHighlight();
+					await lineHighlightManager.refresh();
+				}
+			}
+		} catch (err) {
+			console.error(`Failed to refresh UI after external change to ${toolName}:`, err);
+		}
+	});
+
 	// 初回のdecoration更新
 	updatePostItDecorations();
 	updateCodeLens();
@@ -175,6 +218,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		...codeMarkerCommands,
 		...readTrackerCommands,
 		onDidChangeActiveEditor,
+		externalChangeDisposable,
+		docsOnDirCreated,
 		postItDecorationType,
 		quickMemoDecorationManager, // Disposable
 		readTrackerStatusBar // Disposable
