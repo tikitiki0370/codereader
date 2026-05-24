@@ -13,16 +13,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # All third-party actions are pinned to commit SHAs (not mutable tags)
+      # so a publisher account takeover cannot inject malicious code at the
+      # tag publishers' discretion. Bump these via Dependabot or manually
+      # by checking the action repos' releases.
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Don't persist GITHUB_TOKEN in .git/config; downstream steps
+          # (and any postinstall scripts they run) shouldn't be able to
+          # read it from the filesystem.
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24.3.0'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.13.1
 
@@ -32,11 +41,13 @@ jobs:
       - name: Build extension
         run: pnpm run package
 
-      - name: Install vsce
-        run: pnpm add -D @vscode/vsce
-
-      - name: Package extension
-        run: pnpm vsce package --no-dependencies
+      # vsce is run via pnpm dlx so it doesn't touch the project lockfile
+      # (frozen-lockfile=true would otherwise reject `pnpm add`) and the
+      # exact version is pinned. TODO: still better to commit vsce to
+      # devDependencies via `pnpm install` so its transitive tree is
+      # locked too — leaving as follow-up.
+      - name: Package extension with vsce
+        run: pnpm dlx @vscode/vsce@3.9.1 package --no-dependencies
 
       - name: Get extension info
         id: extension
@@ -45,7 +56,7 @@ jobs:
           echo "vsix_name=codereader-$(node -p "require('./package.json').version").vsix" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: ${{ steps.extension.outputs.vsix_name }}
           generate_release_notes: true
