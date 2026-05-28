@@ -20,11 +20,8 @@ export class PostItTreeView extends BaseTreeProvider<PostItNote, PostItTreeItem,
     // ===========================================
 
     protected async getRootFolders(): Promise<string[]> {
-        console.log('PostItTreeView.getRootFolders called');
         try {
-            const folders = await this.storage.getFolders();
-            console.log('PostIt folders:', folders);
-            return folders;
+            return await this.storage.getFolders();
         } catch (error) {
             console.error('PostItTreeView.getRootFolders error:', error);
             throw error;

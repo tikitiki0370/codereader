@@ -26,8 +26,8 @@ export class PostItManager {
      * VS Code拡張にプロバイダーを登録
      */
     registerProviders(context: vscode.ExtensionContext): void {
-        // ドラッグ&ドロップ機能付きTreeViewを登録
-        vscode.window.createTreeView('codeReaderPostIt', {
+        // ドラッグ&ドロップ機能付きTreeViewを登録 (TreeView 自体も Disposable)
+        const treeView = vscode.window.createTreeView('codeReaderPostIt', {
             treeDataProvider: this.treeProvider,
             dragAndDropController: this.treeProvider
         });
@@ -42,7 +42,7 @@ export class PostItManager {
         const lineTrackerDisposable = this.lineTracker.register();
 
         // Disposableをコンテキストに追加
-        context.subscriptions.push(codeLensDisposable, foldingDisposable, lineTrackerDisposable);
+        context.subscriptions.push(treeView, codeLensDisposable, foldingDisposable, lineTrackerDisposable);
     }
 
     /**

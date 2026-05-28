@@ -34,12 +34,12 @@ export class QuickMemoTreeItem extends BaseTreeItem<QuickMemoFile> {
     }
 
     protected getDataTooltip(): string {
-        if (!this.data) return '';
+        if (!this.data) {return '';}
         return `${this.data.title}\nCreated: ${this.data.createAt}\nUpdated: ${this.data.updateAt}`;
     }
 
     protected getDataDescription(): string | undefined {
-        if (!this.data) return undefined;
+        if (!this.data) {return undefined;}
         return `${this.data.Lines.length > 0 ? '🔗 ' : ''}${new Date(this.data.updateAt).toLocaleDateString()}`;
     }
 
@@ -52,7 +52,7 @@ export class QuickMemoTreeItem extends BaseTreeItem<QuickMemoFile> {
     }
 
     protected getDataCommand(): vscode.Command | undefined {
-        if (!this.data) return undefined;
+        if (!this.data) {return undefined;}
         return {
             command: 'codereader.openQuickMemo',
             title: 'Open Memo',

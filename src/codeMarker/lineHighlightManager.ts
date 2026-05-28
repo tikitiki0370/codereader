@@ -25,22 +25,27 @@ export class LineHighlightManager {
         private context: vscode.ExtensionContext
     ) {
         this.initializeDecorationTypes();
-        this.loadAndApplyAllHighlights();
+        this.loadAndApplyAllHighlights().catch(err =>
+            console.error('LineHighlightManager initial load failed:', err)
+        );
 
-        // エディタが変更されたときにハイライトを再適用
-        vscode.window.onDidChangeActiveTextEditor(editor => {
-            if (editor) {
-                this.applyHighlightsToEditor(editor);
-            }
-        });
-
-        // ドキュメントを開いたときにハイライトを適用
-        vscode.workspace.onDidOpenTextDocument(document => {
-            const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
-            if (editor) {
-                this.applyHighlightsToEditor(editor);
-            }
-        });
+        // Disposable を context.subscriptions に積んで extension deactivate 時に解放する
+        // (旧実装は捨て値で再 activate 毎にリスナー多重登録のリスクがあった)
+        this.context.subscriptions.push(
+            // エディタが変更されたときにハイライトを再適用
+            vscode.window.onDidChangeActiveTextEditor(editor => {
+                if (editor) {
+                    this.applyHighlightsToEditor(editor);
+                }
+            }),
+            // ドキュメントを開いたときにハイライトを適用
+            vscode.workspace.onDidOpenTextDocument(document => {
+                const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
+                if (editor) {
+                    this.applyHighlightsToEditor(editor);
+                }
+            })
+        );
     }
 
     /**
@@ -64,7 +69,7 @@ export class LineHighlightManager {
      */
     private async loadAndApplyAllHighlights(): Promise<void> {
         const data = await this.storage.getCodeMarkerData();
-        if (!data.CodeMarker) return;
+        if (!data.CodeMarker) {return;}
 
         // すべてのファイルのハイライトを収集
         Object.entries(data.CodeMarker).forEach(([folder, files]) => {
@@ -121,14 +126,14 @@ export class LineHighlightManager {
         });
 
         this.storage.getCodeMarkerData().then(data => {
-            if (!data.CodeMarker) return;
+            if (!data.CodeMarker) {return;}
 
             // ファイルのすべてのハイライト情報を収集
             const allHighlights: (CodeMarkerLineHighlight & { folder: string })[] = [];
             
             Object.entries(data.CodeMarker).forEach(([folder, files]) => {
                 const fileData = files[filePath];
-                if (!fileData || !fileData.LineHighlight) return;
+                if (!fileData || !fileData.LineHighlight) {return;}
 
                 fileData.LineHighlight.forEach(highlight => {
                     allHighlights.push({ ...highlight, folder });
@@ -305,14 +310,14 @@ export class LineHighlightManager {
      */
     public async deleteHighlightsByType(type: string): Promise<number> {
         const data = await this.storage.getCodeMarkerData();
-        if (!data.CodeMarker) return 0;
+        if (!data.CodeMarker) {return 0;}
 
         let deletedCount = 0;
 
         // 全フォルダ・全ファイルを走査
         for (const [folder, files] of Object.entries(data.CodeMarker)) {
             for (const [filePath, fileData] of Object.entries(files)) {
-                if (!fileData.LineHighlight) continue;
+                if (!fileData.LineHighlight) {continue;}
 
                 // type が一致するハイライトを特定
                 const highlightsToDelete = fileData.LineHighlight.filter(h => h.type === type);
@@ -344,13 +349,13 @@ export class LineHighlightManager {
      */
     public async getHighlightsByType(type: string): Promise<{ folder: string; filePath: string; highlight: CodeMarkerLineHighlight }[]> {
         const data = await this.storage.getCodeMarkerData();
-        if (!data.CodeMarker) return [];
+        if (!data.CodeMarker) {return [];}
 
         const results: { folder: string; filePath: string; highlight: CodeMarkerLineHighlight }[] = [];
 
         for (const [folder, files] of Object.entries(data.CodeMarker)) {
             for (const [filePath, fileData] of Object.entries(files)) {
-                if (!fileData.LineHighlight) continue;
+                if (!fileData.LineHighlight) {continue;}
 
                 for (const highlight of fileData.LineHighlight) {
                     if (highlight.type === type) {

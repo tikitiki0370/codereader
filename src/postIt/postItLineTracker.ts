@@ -35,8 +35,8 @@ export class PostItLineTracker {
      */
     private async handleDocumentChange(event: vscode.TextDocumentChangeEvent): Promise<void> {
         // ファイル以外（出力チャンネルなど）は無視
-        if (event.document.uri.scheme !== 'file') return;
-        if (event.contentChanges.length === 0) return;
+        if (event.document.uri.scheme !== 'file') {return;}
+        if (event.contentChanges.length === 0) {return;}
 
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(event.document.uri);
         const filePath = workspaceFolder
@@ -46,12 +46,12 @@ export class PostItLineTracker {
         // キャッシュにない場合はストレージから取得
         if (!this.postItCache.has(filePath)) {
             const postIts = await this.storage.getNotesByFile(filePath);
-            if (postIts.length === 0) return;
+            if (postIts.length === 0) {return;}
             this.postItCache.set(filePath, postIts);
         }
 
         const postIts = this.postItCache.get(filePath)!;
-        if (postIts.length === 0) return;
+        if (postIts.length === 0) {return;}
 
         // 即座に行番号を調整（メモリ上）
         // contentChangesは後ろから前の順で来るため、そのまま処理してOK
@@ -86,7 +86,7 @@ export class PostItLineTracker {
      * 更新をストレージに保存
      */
     private async savePendingUpdates(): Promise<void> {
-        if (this.pendingUpdates.size === 0) return;
+        if (this.pendingUpdates.size === 0) {return;}
 
         const updatedIds = new Set(this.pendingUpdates);
         this.pendingUpdates.clear();
@@ -126,7 +126,7 @@ export class PostItLineTracker {
         const lineDelta = addedLines - removedLines;
 
         // 行数に変化がない場合はスキップ
-        if (lineDelta === 0) return [];
+        if (lineDelta === 0) {return [];}
 
         const changedIds: string[] = [];
 
@@ -134,7 +134,7 @@ export class PostItLineTracker {
             let postItChanged = false;
 
             for (const line of postIt.Lines) {
-                if (line.file !== filePath) continue;
+                if (line.file !== filePath) {continue;}
 
                 // PostItの行番号は1ベース、変更位置は0ベース
                 const postItStartLine0 = line.line - 1;

@@ -135,7 +135,7 @@ export class PostItStorage extends BaseFolderStorage<PostIt> {
             }
         }
         
-        if (!noteToMove || !sourceFolder) return false;
+        if (!noteToMove || !sourceFolder) {return false;}
         
         // ターゲットフォルダが存在しない場合は作成
         if (!data.PostIts[targetFolder]) {
@@ -244,7 +244,7 @@ export class PostItStorage extends BaseFolderStorage<PostIt> {
         
         for (const notes of Object.values(data.PostIts)) {
             const note = notes.find(n => n.id === id);
-            if (note) return note;
+            if (note) {return note;}
         }
         
         return null;

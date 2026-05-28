@@ -32,11 +32,11 @@ export class QuickMemoDecorationManager {
         const decorations: vscode.DecorationOptions[] = [];
 
         for (const memo of memos) {
-            if (!memo.linkedLine) continue;
+            if (!memo.linkedLine) {continue;}
             
             // 行番号の整合性チェック
             const line = memo.linkedLine.line;
-            if (line >= editor.document.lineCount) continue;
+            if (line >= editor.document.lineCount) {continue;}
 
             // メモの内容を取得（非同期だが、ループ内でawaitすると重くなる可能性があるため注意）
             // コンテンツは軽量と仮定して取得
@@ -54,10 +54,10 @@ export class QuickMemoDecorationManager {
             for (let i = 0; i < lines.length; i++) {
                 const l = lines[i].trim();
                 // タイトル、メタデータ、空行、Linked行をスキップ
-                if (l.startsWith('# ')) continue;
-                if (l.startsWith('Created: ')) continue;
-                if (l.startsWith('Linked: ')) continue;
-                if (l === '') continue;
+                if (l.startsWith('# ')) {continue;}
+                if (l.startsWith('Created: ')) {continue;}
+                if (l.startsWith('Linked: ')) {continue;}
+                if (l === '') {continue;}
                 
                 bodyPreview = l;
                 foundBody = true;

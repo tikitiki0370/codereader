@@ -105,6 +105,11 @@ export abstract class BaseFolderStorage<TData> {
             return false; // デフォルトフォルダはリネーム不可
         }
 
+        // newPath が oldPath 自身またはサブフォルダだとパスのパラドックスになる
+        if (newPath === oldPath || newPath.startsWith(oldPath + '/')) {
+            return false;
+        }
+
         const data = await this.getData();
         const folderObject = this.getFolderObject(data);
 
@@ -116,17 +121,22 @@ export abstract class BaseFolderStorage<TData> {
         folderObject[newPath] = folderObject[oldPath];
         delete folderObject[oldPath];
 
-        // サブフォルダもリネーム
+        // サブフォルダもリネーム。filter が startsWith(oldPath + '/') を保証するので、
+        // prefix を切り出して newPath に付け替える (String#replace は oldPath が末端や
+        // 中間に再出現したときに想定外の置換をしうるため使わない)
         const subfolders = Object.keys(folderObject).filter(f => f.startsWith(oldPath + '/'));
         for (const subfolder of subfolders) {
-            const newSubPath = subfolder.replace(oldPath, newPath);
+            const newSubPath = newPath + subfolder.substring(oldPath.length);
             folderObject[newSubPath] = folderObject[subfolder];
             delete folderObject[subfolder];
         }
 
-        // 最後に使用したフォルダの更新
-        if (this.getLastedFolder(data) === oldPath) {
+        // 最後に使用したフォルダの更新 (lastedFolder がリネーム対象自身/サブどちらでも追随)
+        const lasted = this.getLastedFolder(data);
+        if (lasted === oldPath) {
             this.setLastedFolder(data, newPath);
+        } else if (lasted && lasted.startsWith(oldPath + '/')) {
+            this.setLastedFolder(data, newPath + lasted.substring(oldPath.length));
         }
 
         this.setFolderObject(data, folderObject);

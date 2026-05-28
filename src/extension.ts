@@ -8,10 +8,6 @@ import { ReadTrackerStorage, ReadTrackerManager, ReadTrackerStatusBar, ReadTrack
 import { AgentDocsGenerator } from './modules';
 
 export async function activate(context: vscode.ExtensionContext) {
-	console.log('Extension activate called');
-	console.log('Context storageUri:', context.storageUri?.toString());
-	console.log('Workspace folders:', vscode.workspace.workspaceFolders?.map(f => f.uri.toString()));
-	
 	// データベースコントローラーを初期化
 	let stateController: StateController;
 	let postItStorage: PostItStorage;
@@ -35,32 +31,27 @@ export async function activate(context: vscode.ExtensionContext) {
 	
 	try {
 		stateController = StateController.getInstance(context);
-		console.log('StateController initialized successfully');
-		console.log('Storage location:', context.storageUri?.toString());
-		
+
 		// PostItStorageを初期化
 		postItStorage = new PostItStorage(stateController);
-		
+
 		// QuickMemoStorageを初期化
 		quickMemoStorage = new QuickMemoStorage(stateController, context);
-		console.log('QuickMemoStorage initialized successfully');
 
 		// QuickMemoDecorationManagerを初期化
 		quickMemoDecorationManager = new QuickMemoDecorationManager(quickMemoStorage);
-		
+
 		// CodeMarkerStorageを初期化
 		codeMarkerStorage = new CodeMarkerStorage(stateController);
-		
+
 		// DiagnosticsManagerを初期化
 		diagnosticsManager = new DiagnosticsManager(codeMarkerStorage, context);
-		
+
 		// LineHighlightManagerを初期化
 		lineHighlightManager = new LineHighlightManager(codeMarkerStorage, context);
-		
+
 		// SyntaxHighlightManagerを初期化
 		syntaxHighlightManager = new SyntaxHighlightManager(codeMarkerStorage, context);
-
-		console.log('CodeMarker initialized successfully');
 
 		// ReadTrackerを初期化
 		readTrackerStorage = new ReadTrackerStorage(stateController, context);
@@ -72,8 +63,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		// ステータスバーを初期化
 		await readTrackerStatusBar.initialize();
-
-		console.log('ReadTracker initialized successfully');
 	} catch (error) {
 		console.error('Failed to initialize StateController:', error);
 		vscode.window.showErrorMessage('Failed to initialize database: ' + error);
@@ -82,15 +71,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// AIエージェント向けドキュメント生成（非ブロッキング）
 	// activate 時には .codereader/ が未作成のことが多いので、初回 save 時の
-	// ディレクトリ作成イベントでも再試行する
+	// ディレクトリ作成イベントでも再試行する。
+	// 「skip」(正常スキップ) は generateIfNeeded 内で return しているので、
+	// ここの catch に来るのは実際の失敗 (権限・I/O エラー等) のみ。
 	const extensionVersion = context.extension.packageJSON.version;
 	const docsGenerator = new AgentDocsGenerator(stateController, extensionVersion);
 	docsGenerator.generateIfNeeded().catch(err =>
-		console.log('Agent docs generation skipped:', err)
+		console.error('Agent docs generation failed:', err)
 	);
 	const docsOnDirCreated = stateController.onStorageDirectoryCreated(() => {
 		docsGenerator.generateIfNeeded().catch(err =>
-			console.log('Agent docs generation skipped:', err)
+			console.error('Agent docs generation failed:', err)
 		);
 	});
 
@@ -107,7 +98,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// CodeMarkerTreeViewを登録（新しいBaseTreeProvider使用版）
 	const codeMarkerTreeView = new CodeMarkerTreeView(codeMarkerStorage);
-	vscode.window.createTreeView('codeReaderCodeMarker', {
+	const codeMarkerTreeViewInstance = vscode.window.createTreeView('codeReaderCodeMarker', {
 		treeDataProvider: codeMarkerTreeView,
 		dragAndDropController: codeMarkerTreeView
 	});
@@ -166,9 +157,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	// エディタ変更時にdecorationとCodeLensを更新
-	const onDidChangeActiveEditor = vscode.window.onDidChangeActiveTextEditor((editor) => {
-		updatePostItDecorations(editor);
-		updateCodeLens();
+	// async コールバックの reject を握り潰さないため try/catch で囲む
+	const onDidChangeActiveEditor = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+		try {
+			await updatePostItDecorations(editor);
+		} catch (err) {
+			console.error('Failed to update PostIt decorations on editor change:', err);
+		}
+		try {
+			updateCodeLens();
+		} catch (err) {
+			console.error('Failed to update CodeLens on editor change:', err);
+		}
 	});
 
 	// 外部編集 (AI agentやエディタによる .codereader/*.json の直接編集) を検知して
@@ -207,9 +207,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	// 初回のdecoration更新
-	updatePostItDecorations();
-	updateCodeLens();
+	// 初回のdecoration更新 (失敗してもactivate全体は継続)
+	updatePostItDecorations().catch(err =>
+		console.error('Initial PostIt decoration update failed:', err)
+	);
+	try {
+		updateCodeLens();
+	} catch (err) {
+		console.error('Initial CodeLens update failed:', err);
+	}
 
 	// 全てのsubscriptionsに追加
 	context.subscriptions.push(
@@ -221,6 +227,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		externalChangeDisposable,
 		docsOnDirCreated,
 		postItDecorationType,
+		quickMemoTreeViewInstance, // TreeView Disposable
+		codeMarkerTreeViewInstance, // TreeView Disposable
 		quickMemoDecorationManager, // Disposable
 		readTrackerStatusBar // Disposable
 	);

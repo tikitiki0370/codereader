@@ -182,7 +182,7 @@ export class ReadTrackerStorage {
      */
     async isLineRead(filePath: string, line: number): Promise<boolean> {
         const record = await this.getRecord(filePath);
-        if (!record) return false;
+        if (!record) {return false;}
         return LineRangeUtils.isLineInRanges(record.lines, line);
     }
 
@@ -194,7 +194,7 @@ export class ReadTrackerStorage {
         const normalizedPath = this.normalizePath(filePath);
         const record = data.Records[normalizedPath];
 
-        if (!record) return false;
+        if (!record) {return false;}
 
         const cloneRange = (original: ReadLineRange, startLine: number, endLine: number): ReadLineRange => ({
             ...original,
@@ -228,7 +228,7 @@ export class ReadTrackerStorage {
         const normalizedPath = this.normalizePath(filePath);
         const record = data.Records[normalizedPath];
 
-        if (!record) return false;
+        if (!record) {return false;}
 
         const cloneRange = (original: ReadLineRange, start: number, end: number): ReadLineRange => ({
             ...original,
@@ -323,7 +323,7 @@ export class ReadTrackerStorage {
      */
     async getFileStats(filePath: string): Promise<FileReadStats | null> {
         const record = await this.getRecord(filePath);
-        if (!record) return null;
+        if (!record) {return null;}
 
         const linesRead = LineRangeUtils.countUniqueLines(record.lines);
 

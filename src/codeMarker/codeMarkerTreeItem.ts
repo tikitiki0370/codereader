@@ -64,7 +64,7 @@ export class CodeMarkerTreeItem extends BaseTreeItem<CodeMarkerDataItem> {
     }
 
     protected getDataTooltip(): string {
-        if (!this.data) return '';
+        if (!this.data) {return '';}
         const fileName = path.basename(this.data.filePath);
 
         switch (this.data.type) {
@@ -87,7 +87,7 @@ export class CodeMarkerTreeItem extends BaseTreeItem<CodeMarkerDataItem> {
     }
 
     protected getDataContextValue(): string {
-        if (!this.data) return '';
+        if (!this.data) {return '';}
         switch (this.data.type) {
             case 'diagnostics': return 'codeMarkerDiagnostics';
             case 'lineHighlight': return 'codeMarkerLineHighlight';
@@ -96,7 +96,7 @@ export class CodeMarkerTreeItem extends BaseTreeItem<CodeMarkerDataItem> {
     }
 
     protected getDataIcon(): vscode.ThemeIcon {
-        if (!this.data) return new vscode.ThemeIcon('symbol-misc');
+        if (!this.data) {return new vscode.ThemeIcon('symbol-misc');}
         
         switch (this.data.type) {
             case 'diagnostics':
@@ -120,7 +120,7 @@ export class CodeMarkerTreeItem extends BaseTreeItem<CodeMarkerDataItem> {
     }
 
     protected getDataCommand(): vscode.Command | undefined {
-        if (!this.data) return undefined;
+        if (!this.data) {return undefined;}
 
         switch (this.data.type) {
             case 'diagnostics':

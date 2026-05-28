@@ -36,13 +36,13 @@ export class PostItTreeItem extends BaseTreeItem<PostItNote> {
     }
 
     protected getDataTooltip(): string {
-        if (!this.data) return '';
+        if (!this.data) {return '';}
         const firstLine = this.data.Lines[0];
         return `${this.data.title}\nColor: ${this.data.color}\nFile: ${firstLine.file}\nLine: ${firstLine.line}\nCreated: ${this.data.createdAt}`;
     }
 
     protected getDataDescription(): string | undefined {
-        if (!this.data) return undefined;
+        if (!this.data) {return undefined;}
         return `${this.data.color} • ${this.data.Lines.length} line(s)`;
     }
 
@@ -55,7 +55,7 @@ export class PostItTreeItem extends BaseTreeItem<PostItNote> {
     }
 
     protected getDataCommand(): vscode.Command | undefined {
-        if (!this.data) return undefined;
+        if (!this.data) {return undefined;}
 
         const lineData = this.data.Lines[0];
         const vscodeLineNumber = lineData.line - 1; // 1ベースから0ベースに変換

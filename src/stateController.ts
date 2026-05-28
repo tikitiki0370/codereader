@@ -24,6 +24,8 @@ export class StateController {
     private lastKnownMtime: Map<string, number> = new Map();
     /** Timestamp (ms) of the last self-write per toolName, for SELF_WRITE_SUPPRESS_MS. */
     private recentSelfWriteAt: Map<string, number> = new Map();
+    /** Tracks toolNames for which a "corrupted JSON" notification has already been shown. */
+    private notifiedCorruption: Set<string> = new Set();
 
     private fileWatcher: vscode.FileSystemWatcher | undefined;
     private watcherStoragePath: string | undefined;
@@ -65,9 +67,9 @@ export class StateController {
 
     /** True if the toolName is in any phase of an in-flight self-write. */
     private isSelfWriteInFlight(toolName: string): boolean {
-        if (this.saveTimeouts.has(toolName)) return true;
-        if (this.savingInProgress.has(toolName)) return true;
-        if (this.deletingInProgress.has(toolName)) return true;
+        if (this.saveTimeouts.has(toolName)) {return true;}
+        if (this.savingInProgress.has(toolName)) {return true;}
+        if (this.deletingInProgress.has(toolName)) {return true;}
         const recentAt = this.recentSelfWriteAt.get(toolName);
         if (recentAt !== undefined && Date.now() - recentAt < SELF_WRITE_SUPPRESS_MS) {
             return true;
@@ -100,24 +102,24 @@ export class StateController {
 
         const handleEvent = (uri: vscode.Uri, kind: 'change' | 'create' | 'delete') => {
             const toolName = this.toolNameFromUri(uri);
-            if (!toolName) return;
-            if (this.isSelfWriteInFlight(toolName)) return;
+            if (!toolName) {return;}
+            if (this.isSelfWriteInFlight(toolName)) {return;}
 
             const existing = this.externalChangeDebounce.get(toolName);
-            if (existing) clearTimeout(existing);
+            if (existing) {clearTimeout(existing);}
 
             const timer = setTimeout(async () => {
                 this.externalChangeDebounce.delete(toolName);
 
                 // Re-check at firing time: a save() may have completed during the debounce window.
-                if (this.isSelfWriteInFlight(toolName)) return;
+                if (this.isSelfWriteInFlight(toolName)) {return;}
 
                 if (kind !== 'delete') {
                     // Final mtime check defends against the filesystem echoing back a write
                     // that completed just before debounce fired.
                     try {
                         const stat = await vscode.workspace.fs.stat(uri);
-                        if (this.lastKnownMtime.get(toolName) === stat.mtime) return;
+                        if (this.lastKnownMtime.get(toolName) === stat.mtime) {return;}
                     } catch {
                         // file vanished mid-debounce — fall through, treat as external delete
                     }
@@ -163,7 +165,6 @@ export class StateController {
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders || workspaceFolders.length === 0) {
                 // Fallback to extension storage if no workspace is open
-                console.log('No workspace open, falling back to extension storage');
                 return this.extensionStorageUri;
             }
             return vscode.Uri.joinPath(workspaceFolders[0].uri, '.codereader');
@@ -212,7 +213,6 @@ export class StateController {
                 console.error('Failed to create storage directory:', error);
                 // If workspace storage fails, try extension storage as fallback
                 if (storageUri !== this.extensionStorageUri && this.extensionStorageUri) {
-                    console.log('Falling back to extension storage');
                     try {
                         await vscode.workspace.fs.createDirectory(this.extensionStorageUri);
                     } catch (fallbackError) {
@@ -230,12 +230,11 @@ export class StateController {
         if (this.dataCache.has(toolName)) {
             // 外部変更をチェック（保留中の保存がある場合はスキップ）
             if (await this.hasFileChangedExternally(toolName)) {
-                console.log(`${toolName} data changed on disk, reloading...`);
                 return await this.load(toolName);
             }
             return this.dataCache.get(toolName);
         }
-        
+
         return await this.load(toolName);
     }
 
@@ -251,7 +250,7 @@ export class StateController {
         this.lastKnownMtime.delete(toolName);
 
         const storageUri = this.getStorageUriInternal();
-        if (!storageUri) return;
+        if (!storageUri) {return;}
 
         this.deletingInProgress.add(toolName);
         try {
@@ -269,7 +268,7 @@ export class StateController {
     // 利用可能なツール一覧を取得
     public async getAvailableTools(): Promise<string[]> {
         const storageUri = this.getStorageUriInternal();
-        if (!storageUri) return [];
+        if (!storageUri) {return [];}
 
         try {
             const files = await vscode.workspace.fs.readDirectory(storageUri);
@@ -279,12 +278,6 @@ export class StateController {
         } catch (error) {
             return [];
         }
-    }
-
-    // ツール固有のデータをクリア
-    public clear(toolName: string): void {
-        this.dataCache.set(toolName, null);
-        this.scheduleSave(toolName);
     }
 
     /**
@@ -324,24 +317,64 @@ export class StateController {
     // ツール固有ファイルからの読み込み
     private async load(toolName: string): Promise<any> {
         const storageUri = this.getStorageUriInternal();
-        if (!storageUri) return null;
+        if (!storageUri) {return null;}
 
         const filePath = vscode.Uri.joinPath(storageUri, `${toolName}.json`);
 
+        // stat: 「ファイルが存在しない」と「読み取り権限なし等の本物の失敗」を切り分ける。
+        // 旧実装は両者+JSON parse 失敗をまとめて握り潰して null を返していたため、
+        // 破損 JSON が「未作成」と解釈され、後続の save() で初期データに上書きされる
+        // データロストパスがあった。
+        let stat: vscode.FileStat;
         try {
-            const stat = await vscode.workspace.fs.stat(filePath);
+            stat = await vscode.workspace.fs.stat(filePath);
+        } catch (error) {
+            const code = (error as { code?: string })?.code;
+            if (code === 'FileNotFound' || code === 'EntryNotFound') {
+                return null;
+            }
+            console.error(`Failed to stat ${toolName}.json:`, error);
+            throw error;
+        }
+
+        let jsonData: string;
+        try {
             const fileData = await vscode.workspace.fs.readFile(filePath);
-            const jsonData = new TextDecoder().decode(fileData);
+            jsonData = new TextDecoder().decode(fileData);
+        } catch (error) {
+            console.error(`Failed to read ${toolName}.json:`, error);
+            throw error;
+        }
+
+        try {
             const data = JSON.parse(jsonData);
             this.dataCache.set(toolName, data);
             this.lastKnownMtime.set(toolName, stat.mtime);
-            console.log(`${toolName} data loaded from file:`, filePath.fsPath);
+            // 復旧したら次回の破損時に再通知できるよう notify フラグをリセット
+            this.notifiedCorruption.delete(toolName);
             return data;
         } catch (error) {
-            // ファイルが存在しない場合はnullを返す
-            console.log(`No existing ${toolName}.json file at:`, filePath.fsPath);
-            return null;
+            // 上書き保存を阻止するため throw する。caller (各 storage / extension activate) は
+            // 既に try/catch を持っているのでユーザー向けの致命エラーにはならない。
+            console.error(`Failed to parse ${toolName}.json (corrupted file):`, error);
+            this.notifyCorruptedFileOnce(toolName, filePath);
+            throw new Error(
+                `${toolName}.json is corrupted and could not be parsed. ` +
+                `Loading aborted to prevent overwriting your data with defaults. ` +
+                `Please back up and fix or delete the file: ${filePath.fsPath}`
+            );
         }
+    }
+
+    /** 破損 JSON の通知を toolName あたり 1 回に絞る */
+    private notifyCorruptedFileOnce(toolName: string, filePath: vscode.Uri): void {
+        if (this.notifiedCorruption.has(toolName)) {return;}
+        this.notifiedCorruption.add(toolName);
+        vscode.window.showErrorMessage(
+            `CodeReader: ${toolName}.json is corrupted. ` +
+            `Loading was aborted to prevent overwriting your data. ` +
+            `Open ${filePath.fsPath} to inspect or fix it.`
+        );
     }
 
     // ツール固有ファイルへの保存（デバウンス付き）
@@ -367,10 +400,10 @@ export class StateController {
     // ツール固有の実際の保存処理
     private async save(toolName: string): Promise<void> {
         const storageUri = this.getStorageUriInternal();
-        if (!storageUri) return;
+        if (!storageUri) {return;}
 
         const data = this.dataCache.get(toolName);
-        if (data === undefined) return;
+        if (data === undefined) {return;}
 
         try {
             // Ensure storage directory exists before saving (lazy initialization)
@@ -425,6 +458,7 @@ export class StateController {
         this.savingInProgress.clear();
         this.deletingInProgress.clear();
         this.recentSelfWriteAt.clear();
+        this.notifiedCorruption.clear();
         this.saveTimeouts.forEach(timeout => clearTimeout(timeout));
         this.saveTimeouts.clear();
         this.externalChangeDebounce.forEach(timeout => clearTimeout(timeout));

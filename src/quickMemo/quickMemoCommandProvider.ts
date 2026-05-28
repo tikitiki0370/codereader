@@ -219,7 +219,7 @@ export class QuickMemoCommandProvider {
                 placeHolder: 'Folder name'
             });
 
-            if (!folderName) return;
+            if (!folderName) {return;}
 
             // バリデーション: スラッシュを含まないこと
             if (folderName.includes('/')) {
@@ -244,14 +244,14 @@ export class QuickMemoCommandProvider {
      */
     private async createQuickMemoSubFolder(treeItem: QuickMemoTreeItem): Promise<void> {
         try {
-            if (!treeItem.folderPath) return;
+            if (!treeItem.folderPath) {return;}
 
             const subFolderName = await vscode.window.showInputBox({
                 prompt: `Create subfolder in "${treeItem.folderPath}"`,
                 placeHolder: 'Subfolder name'
             });
 
-            if (!subFolderName) return;
+            if (!subFolderName) {return;}
 
             if (subFolderName.includes('/')) {
                 vscode.window.showErrorMessage('Folder name cannot contain "/"');
@@ -278,7 +278,7 @@ export class QuickMemoCommandProvider {
      */
     private async renameQuickMemoFolder(treeItem: QuickMemoTreeItem): Promise<void> {
         try {
-            if (!treeItem.folderPath) return;
+            if (!treeItem.folderPath) {return;}
 
             const oldPath = treeItem.folderPath;
             const currentName = oldPath.split('/').pop() || '';
@@ -289,7 +289,7 @@ export class QuickMemoCommandProvider {
                 value: currentName
             });
 
-            if (!newName || newName === currentName) return;
+            if (!newName || newName === currentName) {return;}
 
             if (newName.includes('/')) {
                 vscode.window.showErrorMessage('Folder name cannot contain "/"');
@@ -315,7 +315,7 @@ export class QuickMemoCommandProvider {
      */
     private async deleteQuickMemoFolder(treeItem: QuickMemoTreeItem): Promise<void> {
         try {
-            if (!treeItem.folderPath) return;
+            if (!treeItem.folderPath) {return;}
 
             // フォルダが空でないかチェック
             const isEmpty = await this.storage.isFolderEmpty(treeItem.folderPath);
@@ -329,7 +329,7 @@ export class QuickMemoCommandProvider {
                 'Delete'
             );
 
-            if (result !== 'Delete') return;
+            if (result !== 'Delete') {return;}
 
             const success = await this.storage.deleteFolder(treeItem.folderPath);
             if (success) {

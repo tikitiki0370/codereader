@@ -55,8 +55,26 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
     private static readonly CURRENT_VERSION = '1.0.0';
     protected readonly DEFAULT_FOLDER = 'General';
 
+    /**
+     * Allowed format for memo.file. Self-created memos use `${randomUUID()}.md`
+     * which always matches; the allowlist exists to reject path-traversal payloads
+     * (`../`, absolute paths, NUL bytes, etc.) that could land in quickMemo.json
+     * via external/AI-agent edits and reach `vscode.Uri.joinPath` + `fs.delete`.
+     */
+    private static readonly SAFE_FILE_PATTERN = /^[A-Za-z0-9_-]+\.md$/;
+
     constructor(stateController: StateController, private context: vscode.ExtensionContext) {
         super(stateController);
+    }
+
+    /**
+     * Validate that a memo.file value is safe to join with the storage directory.
+     * Throws on rejection so callers cannot silently operate on a forged path.
+     */
+    private static assertSafeMemoFile(file: string): void {
+        if (!QuickMemoStorage.SAFE_FILE_PATTERN.test(file)) {
+            throw new Error(`Unsafe quickMemo file name rejected: ${JSON.stringify(file)}`);
+        }
     }
 
     // Get storage URI from StateController
@@ -74,11 +92,9 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             const mdDir = vscode.Uri.joinPath(storageUri, 'quickMemo');
             try {
                 await vscode.workspace.fs.stat(mdDir);
-                console.log('QuickMemo directory exists:', mdDir.fsPath);
             } catch {
                 try {
                     await vscode.workspace.fs.createDirectory(mdDir);
-                    console.log('QuickMemo directory created:', mdDir.fsPath);
                 } catch (e) {
                     console.error('Failed to create QuickMemo directory:', e);
                 }
@@ -173,7 +189,13 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
     async getMemoContent(memo: QuickMemoFile): Promise<string> {
         const storageUri = this.getStorageUri();
         if (!storageUri) {
-            // throw new Error('Storage URI not available');
+            return '';
+        }
+
+        try {
+            QuickMemoStorage.assertSafeMemoFile(memo.file);
+        } catch (error) {
+            console.error('Refusing to read memo content:', error);
             return '';
         }
 
@@ -222,7 +244,7 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
 
         for (const memos of Object.values(data.QuickMemos)) {
             const memo = memos.find(m => m.id === id);
-            if (memo) return memo;
+            if (memo) {return memo;}
         }
 
         return null;
@@ -234,6 +256,8 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
         if (!storageUri) {
             throw new Error('Storage URI not available');
         }
+
+        QuickMemoStorage.assertSafeMemoFile(memo.file);
 
         await this.ensureQuickMemoDirectory();
         const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
@@ -292,6 +316,8 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             throw new Error('Storage URI not available');
         }
 
+        QuickMemoStorage.assertSafeMemoFile(memo.file);
+
         const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
         const doc = await vscode.workspace.openTextDocument(mdPath);
         await vscode.window.showTextDocument(doc);
@@ -323,12 +349,13 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             // Markdownファイルを削除
             const storageUri = this.getStorageUri();
             if (storageUri) {
-                const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
                 try {
+                    QuickMemoStorage.assertSafeMemoFile(memo.file);
+                    const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
                     await vscode.workspace.fs.delete(mdPath);
                 } catch (error) {
                     console.warn('Failed to delete markdown file:', error);
-                    // ファイル削除に失敗してもデータベースからは削除されているので続行
+                    // 不正なfileやfs失敗でもJSONからは既に削除済みのため続行
                 }
             }
 
@@ -425,8 +452,9 @@ export class QuickMemoStorage extends BaseFolderStorage<QuickMemo> {
             const memos = data.QuickMemos[folder];
             if (storageUri && memos) {
                 for (const memo of memos) {
-                    const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
                     try {
+                        QuickMemoStorage.assertSafeMemoFile(memo.file);
+                        const mdPath = vscode.Uri.joinPath(storageUri, 'quickMemo', memo.file);
                         await vscode.workspace.fs.delete(mdPath);
                     } catch (error) {
                         console.warn('Failed to delete markdown file:', error);

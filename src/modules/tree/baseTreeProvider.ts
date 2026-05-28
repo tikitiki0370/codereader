@@ -39,34 +39,25 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem,
      * 子要素を取得
      */
     async getChildren(element?: TTreeItem): Promise<TTreeItem[]> {
-        console.log('BaseTreeProvider.getChildren called with element:', element);
         try {
             if (!element) {
                 // ルートレベル - フォルダを表示
-                console.log('Getting root folders...');
                 const folders = await this.getRootFolders();
-                console.log('Root folders:', folders);
-                const items = folders.map(folder => this.createFolderItem(folder));
-                console.log('Created root items:', items.length);
-                return items;
+                return folders.map(folder => this.createFolderItem(folder));
             } else if (this.isFolderItem(element)) {
                 // フォルダ内のサブフォルダとアイテムを表示
                 const folderPath = this.getFolderPath(element);
-                console.log('Getting children for folder:', folderPath);
                 if (folderPath) {
                     const items: TTreeItem[] = [];
-                    
+
                     // サブフォルダを追加
                     const subfolders = await this.getSubfolders(folderPath);
-                    console.log('Subfolders:', subfolders);
                     items.push(...subfolders.map(subfolder => this.createFolderItem(subfolder)));
-                    
+
                     // データアイテムを追加
                     const dataItems = await this.getItemsByFolder(folderPath);
-                    console.log('Data items:', dataItems.length);
                     items.push(...dataItems.map(item => this.createDataItem(item, folderPath)));
-                    
-                    console.log('Total folder items:', items.length);
+
                     return items;
                 }
             }
@@ -74,8 +65,7 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem,
             console.error('Error getting tree children:', error);
             vscode.window.showErrorMessage(this.getErrorMessage(error));
         }
-        
-        console.log('Returning empty array');
+
         return [];
     }
 
@@ -118,11 +108,11 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem,
      */
     async handleDrag(source: TTreeItem[], treeDataTransfer: vscode.DataTransfer): Promise<void> {
         // ドラッグ&ドロップが無効な場合は何もしない
-        if (this.dragMimeTypes.length === 0) return;
+        if (this.dragMimeTypes.length === 0) {return;}
         
         // ドラッグ可能なアイテムのみフィルタリング
         const draggableItems = source.filter(item => this.canDrag(item));
-        if (draggableItems.length === 0) return;
+        if (draggableItems.length === 0) {return;}
 
         // ドラッグデータを作成
         const dragData = this.createDragData(draggableItems);
@@ -139,10 +129,10 @@ export abstract class BaseTreeProvider<TData, TTreeItem extends vscode.TreeItem,
      */
     async handleDrop(target: TTreeItem | undefined, sources: vscode.DataTransfer): Promise<void> {
         // ドラッグ&ドロップが無効な場合は何もしない
-        if (this.dropMimeTypes.length === 0) return;
+        if (this.dropMimeTypes.length === 0) {return;}
         
         const transferItem = sources.get(this.dropMimeTypes[0]);
-        if (!transferItem) return;
+        if (!transferItem) {return;}
 
         try {
             const dragData = JSON.parse(transferItem.value);

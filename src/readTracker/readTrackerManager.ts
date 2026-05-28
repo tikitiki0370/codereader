@@ -167,7 +167,7 @@ export class ReadTrackerManager {
         let syncedLines = 0;
 
         for (const record of records) {
-            if (record.lines.length === 0) continue;
+            if (record.lines.length === 0) {continue;}
 
             // Merge all lines into ranges for this file
             const lines = record.lines.map(l => ({

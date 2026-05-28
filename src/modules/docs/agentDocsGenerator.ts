@@ -22,7 +22,6 @@ export class AgentDocsGenerator {
     async generateIfNeeded(): Promise<void> {
         // Only generate in workspace storage mode
         if (!this.stateController.isWorkspaceStorage()) {
-            console.log('Agent docs: skipped (not workspace storage mode)');
             return;
         }
 
@@ -35,7 +34,6 @@ export class AgentDocsGenerator {
         try {
             await vscode.workspace.fs.stat(storageUri);
         } catch {
-            console.log('Agent docs: skipped (.codereader/ directory does not exist yet)');
             return;
         }
 

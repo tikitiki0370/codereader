@@ -15,22 +15,26 @@ export class SyntaxHighlightManager {
         private context: vscode.ExtensionContext
     ) {
         this.initializeDecorationType();
-        this.loadAndApplyAllSyntaxHighlights();
+        this.loadAndApplyAllSyntaxHighlights().catch(err =>
+            console.error('SyntaxHighlightManager initial load failed:', err)
+        );
 
-        // エディタが変更されたときにハイライトを再適用
-        vscode.window.onDidChangeActiveTextEditor(editor => {
-            if (editor) {
-                this.applySyntaxHighlightToEditor(editor);
-            }
-        });
-
-        // ドキュメントを開いたときにハイライトを適用
-        vscode.workspace.onDidOpenTextDocument(document => {
-            const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
-            if (editor) {
-                this.applySyntaxHighlightToEditor(editor);
-            }
-        });
+        // Disposable を context.subscriptions に積んで extension deactivate 時に解放する
+        this.context.subscriptions.push(
+            // エディタが変更されたときにハイライトを再適用
+            vscode.window.onDidChangeActiveTextEditor(editor => {
+                if (editor) {
+                    this.applySyntaxHighlightToEditor(editor);
+                }
+            }),
+            // ドキュメントを開いたときにハイライトを適用
+            vscode.workspace.onDidOpenTextDocument(document => {
+                const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
+                if (editor) {
+                    this.applySyntaxHighlightToEditor(editor);
+                }
+            })
+        );
     }
 
     /**
@@ -50,7 +54,7 @@ export class SyntaxHighlightManager {
      */
     private async loadAndApplyAllSyntaxHighlights(): Promise<void> {
         const data = await this.storage.getCodeMarkerData();
-        if (!data.CodeMarker) return;
+        if (!data.CodeMarker) {return;}
 
         // すべてのファイルのSyntaxHighlightを収集
         Object.entries(data.CodeMarker).forEach(([folder, files]) => {
@@ -99,7 +103,7 @@ export class SyntaxHighlightManager {
         editor.setDecorations(this.greyoutDecorationType, []);
 
         this.storage.getCodeMarkerData().then(data => {
-            if (!data.CodeMarker) return;
+            if (!data.CodeMarker) {return;}
 
             // ファイルのSyntaxHighlight情報を取得
             let syntaxHighlight: CodeMarkerSyntaxHighlight | null = null;
@@ -114,7 +118,7 @@ export class SyntaxHighlightManager {
                 }
             });
 
-            if (!syntaxHighlight) return;
+            if (!syntaxHighlight) {return;}
 
             // デコレーションを作成して適用
             const decorations: vscode.DecorationOptions[] = [];
@@ -302,7 +306,7 @@ export class SyntaxHighlightManager {
      */
     public async getSyntaxHighlight(filePath: string): Promise<CodeMarkerSyntaxHighlight | null> {
         const data = await this.storage.getCodeMarkerData();
-        if (!data.CodeMarker) return null;
+        if (!data.CodeMarker) {return null;}
 
         for (const [folder, files] of Object.entries(data.CodeMarker)) {
             const fileData = files[filePath];

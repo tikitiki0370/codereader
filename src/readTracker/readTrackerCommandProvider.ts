@@ -277,7 +277,7 @@ export class ReadTrackerCommandProvider {
             placeHolder: 'Reading statistics',
         });
 
-        if (!selected) return;
+        if (!selected) {return;}
 
         if (selected.label.includes('Sync Mode')) {
             await this.toggleSyncMode();
@@ -311,9 +311,9 @@ export class ReadTrackerCommandProvider {
      */
     private async toggleReadMarkUp(): Promise<void> {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {return;}
 
-        if (editor.document.uri.scheme !== 'file') return;
+        if (editor.document.uri.scheme !== 'file') {return;}
 
         const filePath = vscode.workspace.asRelativePath(editor.document.uri);
         const line = editor.selection.active.line + 1;  // 1-indexed
@@ -333,9 +333,9 @@ export class ReadTrackerCommandProvider {
      */
     private async toggleReadMarkDown(): Promise<void> {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {return;}
 
-        if (editor.document.uri.scheme !== 'file') return;
+        if (editor.document.uri.scheme !== 'file') {return;}
 
         const filePath = vscode.workspace.asRelativePath(editor.document.uri);
         const line = editor.selection.active.line + 1;  // 1-indexed
